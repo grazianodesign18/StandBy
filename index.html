@@ -128,17 +128,17 @@
             border-radius: 2px;
         }
         @keyframes slideUp {
-            from { transform: translateY(16px); opacity: 0; }
+            from { transform: translateY(12px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
         }
         .animate-slide-up {
-            animation: slideUp 0.4s ease-out forwards;
+            animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
     </style>
 </head>
 <body class="h-full w-full bg-amoled flex items-center justify-center p-4 sm:p-8 select-none relative">
 
-    <!-- FULLSCREEN GRADIENT BACKGROUND LAYER -->
+    <!-- HORIZONTAL OVAL GRADIENT BACKGROUND LAYER -->
     <div id="ambient-glow" class="fixed -inset-10 pointer-events-none transition-all duration-1000 ease-out z-0 opacity-40"></div>
 
     <!-- Top Floating Toolbar -->
@@ -158,7 +158,7 @@
             <i class="fa-solid fa-xmark"></i>
         </button>
         <div id="fullscreen-lyrics-container" class="max-w-xl flex flex-col gap-6">
-            <p class="text-2xl sm:text-3xl font-extrabold text-white animate-slide-up" id="fs-current-lyric">Loading lyrics...</p>
+            <p class="text-2xl sm:text-3xl font-extrabold text-white animate-slide-up" id="fs-current-lyric">Searching lyrics...</p>
             <p class="text-lg sm:text-xl font-bold text-zinc-600" id="fs-next-lyric"></p>
         </div>
     </div>
@@ -247,7 +247,7 @@
                 </div>
             </section>
 
-            <!-- TYPE 2 INLINE LYRICS CONTAINER (Borderless, just below battery/weather) -->
+            <!-- TYPE 2 INLINE LYRICS CONTAINER -->
             <div id="type2-lyrics-container" class="w-full max-w-sm flex flex-col items-center text-center h-12 justify-center overflow-hidden hidden">
                 <p id="t2-current" class="text-xs font-bold text-white transition-all duration-300 animate-slide-up truncate px-2"></p>
                 <p id="t2-next" class="text-[10px] font-medium text-zinc-600 transition-all duration-300 truncate px-2 mt-0.5"></p>
@@ -348,7 +348,7 @@
             accessToken: null,
             isPlaying: false,
             isShuffle: false,
-            repeatState: 'off', // 'off', 'context', 'track'
+            repeatState: 'off',
             trackDuration: 0,
             trackProgress: 0,
             lastFetchTime: 0,
@@ -362,12 +362,11 @@
             currentAlbumId: null,
             activeTab: 'album',
             currentTrackUri: null,
-            mockLyrics: [
-                { time: 0, text: "♪ Instrumental Intro ♪", next: "Here we go again" },
-                { time: 10, text: "Here we go again", next: "Feeling like a champion" },
-                { time: 20, text: "Feeling like a champion", next: "Nothing can stop us now" },
-                { time: 35, text: "Nothing can stop us now", next: "♪ Instrumental ♪" }
-            ]
+            currentTrackName: null,
+            currentArtistName: null,
+            syncedLyrics: [],
+            hasLyrics: false,
+            isLoadingLyrics: false
         };
 
         const floatingToolbar = document.getElementById('floating-toolbar');
@@ -534,6 +533,7 @@
         window.addEventListener('mousemove', showToolbar, { passive: true });
         window.addEventListener('click', showToolbar, { passive: true });
 
+        // HORIZONTAL OVAL GRADIENT BACKGROUND
         function updateAmbientColor(imgSrc) {
             if (!state.glowEnabled) {
                 ambientGlow.style.background = 'transparent';
@@ -577,7 +577,8 @@
                     }
                 }
 
-                ambientGlow.style.background = `radial-gradient(circle at 50% 50%, rgba(${bestR},${bestG},${bestB}, 0.55) 0%, rgba(${bestR},${bestG},${bestB}, 0.25) 40%, rgba(0,0,0,0) 70%)`;
+                // Horizontal Oval Gradient (ellipse 90% 45% at center)
+                ambientGlow.style.background = `radial-gradient(ellipse 90% 45% at 50% 50%, rgba(${bestR},${bestG},${bestB}, 0.60) 0%, rgba(${bestR},${bestG},${bestB}, 0.25) 50%, rgba(0,0,0,0) 85%)`;
             };
         }
 
@@ -683,6 +684,56 @@
             }
         }
 
+        // FETCH SYNCED LYRICS VIA LRCLIB API
+        async function fetchTrackLyrics(trackName, artistName, durationSecs) {
+            if (!trackName || !artistName) return;
+            state.isLoadingLyrics = true;
+            state.hasLyrics = false;
+            state.syncedLyrics = [];
+
+            try {
+                const url = `https://lrclib.net/api/get?track_name=${encodeURIComponent(trackName)}&artist_name=${encodeURIComponent(artistName)}&duration=${durationSecs}`;
+                const res = await fetch(url);
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.syncedLyrics) {
+                        parseLrcString(data.syncedLyrics);
+                    } else if (data && data.plainLyrics) {
+                        state.syncedLyrics = [{ time: 0, text: data.plainLyrics }];
+                        state.hasLyrics = true;
+                    }
+                }
+            } catch(e) {}
+
+            state.isLoadingLyrics = false;
+            updateLyricsDisplay();
+        }
+
+        function parseLrcString(lrcText) {
+            const lines = lrcText.split('\n');
+            const parsed = [];
+            const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/;
+
+            lines.forEach(line => {
+                const match = timeRegex.exec(line);
+                if (match) {
+                    const mins = parseInt(match[1]);
+                    const secs = parseInt(match[2]);
+                    const totalSecs = mins * 60 + secs;
+                    const text = line.replace(timeRegex, '').trim();
+                    if (text) {
+                        parsed.push({ time: totalSecs, text: text });
+                    }
+                }
+            });
+
+            if (parsed.length > 0) {
+                state.syncedLyrics = parsed.sort((a, b) => a.time - b.time);
+                state.hasLyrics = true;
+            }
+        }
+
         function updateLyricsDisplay() {
             if (!state.lyricsActive) {
                 lyricsFullscreenView.classList.add('hidden');
@@ -690,27 +741,38 @@
                 return;
             }
 
-            // Find current active lyric line based on trackProgress
-            let activeIdx = 0;
-            for (let i = 0; i < state.mockLyrics.length; i++) {
-                if (state.trackProgress >= state.mockLyrics[i].time) {
-                    activeIdx = i;
+            let curText = "No lyrics available";
+            let nxtText = "";
+
+            if (state.isLoadingLyrics) {
+                curText = "Searching lyrics...";
+            } else if (state.hasLyrics && state.syncedLyrics.length > 0) {
+                let activeIdx = -1;
+                for (let i = 0; i < state.syncedLyrics.length; i++) {
+                    if (state.trackProgress >= state.syncedLyrics[i].time) {
+                        activeIdx = i;
+                    }
+                }
+
+                if (activeIdx >= 0) {
+                    curText = state.syncedLyrics[activeIdx].text;
+                    nxtText = state.syncedLyrics[activeIdx + 1]?.text || "";
+                } else {
+                    curText = "♪ ... ♪";
+                    nxtText = state.syncedLyrics[0]?.text || "";
                 }
             }
-
-            const currentObj = state.mockLyrics[activeIdx] || state.mockLyrics[0];
-            const nextObj = state.mockLyrics[activeIdx + 1] || { text: "" };
 
             if (state.lyricsType === '1') {
                 lyricsFullscreenView.classList.remove('hidden');
                 type2Container.classList.add('hidden');
-                fsCurrentLyric.textContent = currentObj.text;
-                fsNextLyric.textContent = nextObj.text;
+                fsCurrentLyric.textContent = curText;
+                fsNextLyric.textContent = nxtText;
             } else {
                 lyricsFullscreenView.classList.add('hidden');
                 type2Container.classList.remove('hidden');
-                t2Current.textContent = currentObj.text;
-                t2Next.textContent = nextObj.text;
+                t2Current.textContent = curText;
+                t2Next.textContent = nxtText;
             }
         }
 
@@ -730,8 +792,11 @@
                 if (res.status === 204 || res.status > 400) return;
                 const data = await res.json();
                 if (data && data.item) {
-                    trackTitle.textContent = data.item.name;
-                    trackArtist.textContent = data.item.artists.map(a => a.name).join(', ');
+                    const newTrackName = data.item.name;
+                    const newArtistName = data.item.artists.map(a => a.name).join(', ');
+
+                    trackTitle.textContent = newTrackName;
+                    trackArtist.textContent = newArtistName;
                     const newArt = data.item.album.images[0]?.url || albumArt.src;
                     albumArt.src = newArt;
                     updateAmbientColor(newArt);
@@ -743,23 +808,24 @@
                     state.currentTrackUri = data.item.uri;
                     
                     playIcon.className = state.isPlaying ? 'fa-solid fa-pause' : 'fa-solid fa-play ml-0.5';
-                    
-                    // Update Shuffle Button UI
                     shuffleBtn.className = state.isShuffle ? 'text-green-400 transition text-xs' : 'text-zinc-600 hover:text-white transition text-xs';
                     
-                    // Update Repeat Button UI
                     if (state.repeatState === 'off') {
                         repeatBtn.className = 'text-zinc-600 hover:text-white transition text-xs';
-                        repeatBtn.title = 'Repeat: Off';
                     } else if (state.repeatState === 'context') {
                         repeatBtn.className = 'text-green-400 transition text-xs';
-                        repeatBtn.title = 'Repeat: All';
                     } else {
                         repeatBtn.className = 'text-green-400 transition text-xs relative after:content-["1"] after:absolute after:-bottom-1 after:-right-1 after:text-[8px] after:font-bold';
-                        repeatBtn.title = 'Repeat: One';
                     }
 
                     state.trackDuration = Math.floor(data.item.duration_ms / 1000);
+
+                    // Re-fetch lyrics if song changed
+                    if (newTrackName !== state.currentTrackName || newArtistName !== state.currentArtistName) {
+                        state.currentTrackName = newTrackName;
+                        state.currentArtistName = newArtistName;
+                        fetchTrackLyrics(newTrackName, newArtistName, state.trackDuration);
+                    }
                     
                     if (!state.isScrubbing) {
                         state.trackProgress = Math.floor(data.progress_ms / 1000);
