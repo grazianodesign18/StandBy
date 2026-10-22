@@ -22,7 +22,7 @@
             "name": "StandBy Clock",
             "short_name": "StandBy",
             "start_url": "./",
-            "display": "standalone",
+            "display": "fullscreen",
             "orientation": "landscape",
             "background_color": "#000000",
             "theme_color": "#000000",
@@ -78,6 +78,7 @@
             user-select: none;
             -webkit-user-select: none;
             -webkit-touch-callout: none;
+            box-sizing: border-box;
         }
         html, body {
             background-color: #000000;
@@ -87,7 +88,8 @@
             touch-action: manipulation;
             width: 100vw;
             height: 100vh;
-            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+            margin: 0;
+            padding: 0;
         }
         .clock-num {
             font-family: 'Unbounded', sans-serif;
@@ -122,7 +124,6 @@
             background: transparent;
         }
         
-        /* Smooth upward sliding for Type 2 inline lyrics */
         @keyframes smoothSlideUp {
             0% { transform: translateY(18px); opacity: 0; }
             100% { transform: translateY(0); opacity: 1; }
@@ -132,10 +133,10 @@
         }
     </style>
 </head>
-<body class="h-full w-full bg-amoled flex items-center justify-center p-4 sm:p-8 select-none relative">
+<body class="w-screen h-screen bg-amoled flex items-center justify-center select-none relative overflow-hidden">
 
-    <!-- VERTICALLY TALL & HORIZONTALLY NARROW OVAL GRADIENT -->
-    <div id="ambient-glow" class="fixed -inset-10 pointer-events-none transition-all duration-1000 ease-out z-0 opacity-70"></div>
+    <!-- EDGE-TO-EDGE OVAL GRADIENT BACKGROUND -->
+    <div id="ambient-glow" class="fixed inset-0 w-full h-full pointer-events-none transition-all duration-1000 ease-out z-0 opacity-70"></div>
 
     <!-- Top Floating Toolbar -->
     <header id="floating-toolbar" class="fixed top-3 right-6 flex items-center gap-3 z-30 opacity-0 transition-opacity duration-500 pointer-events-none">
@@ -148,8 +149,8 @@
         </button>
     </header>
 
-    <!-- TYPE 1 FULLSCREEN SCROLLING LYRICS OVERLAY (Matches Image 2 Layout) -->
-    <div id="lyrics-fullscreen-view" class="fixed inset-0 z-40 hidden flex flex-col items-center justify-start transition-colors duration-700" style="background-color: #041d42;">
+    <!-- TYPE 1 FULLSCREEN SCROLLING LYRICS OVERLAY -->
+    <div id="lyrics-fullscreen-view" class="fixed inset-0 w-screen h-screen z-40 hidden flex flex-col items-center justify-start transition-colors duration-700" style="background-color: #041d42;">
         <button id="close-fullscreen-lyrics" class="fixed top-6 right-8 text-white/60 hover:text-white text-xl z-50 p-2">
             <i class="fa-solid fa-xmark"></i>
         </button>
@@ -159,7 +160,7 @@
     </div>
 
     <!-- OLED Burn-In Protection Shift Wrapper -->
-    <div id="burnin-wrapper" class="w-full max-w-md flex flex-col items-center justify-center my-auto z-10 relative">
+    <div id="burnin-wrapper" class="w-full max-w-md flex flex-col items-center justify-center z-10 relative px-4">
         
         <main class="w-full flex flex-col items-center gap-6 text-center">
 
@@ -252,7 +253,7 @@
     </div>
 
     <!-- SPOTIFY TRACK/ALBUM SELECTOR OVERLAY -->
-    <div id="spotify-drawer" class="fixed inset-0 bg-black/90 backdrop-blur-lg z-50 hidden flex items-center justify-center p-4">
+    <div id="spotify-drawer" class="fixed inset-0 w-screen h-screen bg-black/90 backdrop-blur-lg z-50 hidden flex items-center justify-center p-4">
         <div class="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl p-5 flex flex-col gap-4 max-h-[85vh]">
             <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
                 <div class="flex items-center gap-2">
@@ -280,7 +281,7 @@
     </div>
 
     <!-- SETTINGS DRAWER -->
-    <div id="settings-modal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div id="settings-modal" class="fixed inset-0 w-screen h-screen bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
         <div class="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-3xl p-6 flex flex-col gap-4 text-xs font-semibold">
             <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
                 <h3 class="font-extrabold text-white text-sm">StandBy Preferences</h3>
@@ -529,7 +530,6 @@
         window.addEventListener('mousemove', showToolbar, { passive: true });
         window.addEventListener('click', showToolbar, { passive: true });
 
-        // VERTICALLY TALL, HORIZONTALLY THINNER OVAL GRADIENT (ellipse 60% 75%)
         function updateAmbientColor(imgSrc) {
             if (!state.glowEnabled) {
                 ambientGlow.style.background = 'transparent';
@@ -746,7 +746,6 @@
             }
         }
 
-        // RENDER FULL LYRICS LIST FOR TYPE 1 (Spotify Fullscreen Mode)
         function renderType1FullLyrics() {
             fsLyricsScrollContainer.innerHTML = '';
 
@@ -878,7 +877,6 @@
 
                     state.trackDuration = Math.floor(data.item.duration_ms / 1000);
 
-                    // Re-fetch lyrics on track change
                     if (newTrackName !== state.currentTrackName || newArtistName !== state.currentArtistName) {
                         state.currentTrackName = newTrackName;
                         state.currentArtistName = newArtistName;
