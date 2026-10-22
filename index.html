@@ -127,19 +127,24 @@
             background: rgba(255,255,255,0.2);
             border-radius: 2px;
         }
-        @keyframes slideUp {
-            from { transform: translateY(12px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
+
+        @keyframes slideUpIn {
+            0% { transform: translateY(24px); opacity: 0; }
+            100% { transform: translateY(0); opacity: 1; }
         }
-        .animate-slide-up {
-            animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        @keyframes slideUpOut {
+            0% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(-24px); opacity: 0; }
+        }
+        .lyric-slide-in {
+            animation: slideUpIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         }
     </style>
 </head>
 <body class="h-full w-full bg-amoled flex items-center justify-center p-4 sm:p-8 select-none relative">
 
-    <!-- HORIZONTAL OVAL GRADIENT BACKGROUND LAYER -->
-    <div id="ambient-glow" class="fixed -inset-10 pointer-events-none transition-all duration-1000 ease-out z-0 opacity-40"></div>
+    <!-- BRIGHTER HORIZONTAL OVAL GRADIENT BACKGROUND -->
+    <div id="ambient-glow" class="fixed -inset-10 pointer-events-none transition-all duration-1000 ease-out z-0 opacity-60"></div>
 
     <!-- Top Floating Toolbar -->
     <header id="floating-toolbar" class="fixed top-3 right-6 flex items-center gap-3 z-30 opacity-0 transition-opacity duration-500 pointer-events-none">
@@ -152,14 +157,14 @@
         </button>
     </header>
 
-    <!-- TYPE 1 FULLSCREEN LYRICS OVERLAY -->
-    <div id="lyrics-fullscreen-view" class="fixed inset-0 bg-black/95 backdrop-blur-xl z-40 hidden flex flex-col items-center justify-center p-8 text-center">
-        <button id="close-fullscreen-lyrics" class="absolute top-6 right-8 text-zinc-400 hover:text-white text-lg">
+    <!-- TYPE 1 FULLSCREEN LYRICS OVERLAY (Matches gradient color with 100% opacity) -->
+    <div id="lyrics-fullscreen-view" class="fixed inset-0 z-40 hidden flex flex-col items-center justify-center p-8 text-center transition-colors duration-700" style="background-color: #050508;">
+        <button id="close-fullscreen-lyrics" class="absolute top-6 right-8 text-zinc-400 hover:text-white text-lg z-50">
             <i class="fa-solid fa-xmark"></i>
         </button>
-        <div id="fullscreen-lyrics-container" class="max-w-xl flex flex-col gap-6">
-            <p class="text-2xl sm:text-3xl font-extrabold text-white animate-slide-up" id="fs-current-lyric">Searching lyrics...</p>
-            <p class="text-lg sm:text-xl font-bold text-zinc-600" id="fs-next-lyric"></p>
+        <div id="fullscreen-lyrics-container" class="max-w-xl flex flex-col gap-6 overflow-hidden py-12">
+            <p class="text-2xl sm:text-3xl font-extrabold text-white transition-all duration-300 lyric-slide-in" id="fs-current-lyric">Searching lyrics...</p>
+            <p class="text-lg sm:text-xl font-bold text-zinc-400/60 transition-all duration-300" id="fs-next-lyric"></p>
         </div>
     </div>
 
@@ -249,8 +254,8 @@
 
             <!-- TYPE 2 INLINE LYRICS CONTAINER -->
             <div id="type2-lyrics-container" class="w-full max-w-sm flex flex-col items-center text-center h-12 justify-center overflow-hidden hidden">
-                <p id="t2-current" class="text-xs font-bold text-white transition-all duration-300 animate-slide-up truncate px-2"></p>
-                <p id="t2-next" class="text-[10px] font-medium text-zinc-600 transition-all duration-300 truncate px-2 mt-0.5"></p>
+                <p id="t2-current" class="text-xs font-bold text-white transition-all duration-300 lyric-slide-in truncate px-2"></p>
+                <p id="t2-next" class="text-[10px] font-medium text-zinc-500 transition-all duration-300 truncate px-2 mt-0.5"></p>
             </div>
 
         </main>
@@ -366,7 +371,8 @@
             currentArtistName: null,
             syncedLyrics: [],
             hasLyrics: false,
-            isLoadingLyrics: false
+            isLoadingLyrics: false,
+            dominantColorStr: '#050508'
         };
 
         const floatingToolbar = document.getElementById('floating-toolbar');
@@ -533,10 +539,11 @@
         window.addEventListener('mousemove', showToolbar, { passive: true });
         window.addEventListener('click', showToolbar, { passive: true });
 
-        // HORIZONTAL OVAL GRADIENT BACKGROUND
+        // BRIGHTER HORIZONTAL OVAL GRADIENT (ellipse 75% 35%)
         function updateAmbientColor(imgSrc) {
             if (!state.glowEnabled) {
                 ambientGlow.style.background = 'transparent';
+                state.dominantColorStr = '#050508';
                 return;
             }
             if (state.currentImageSrc === imgSrc) return;
@@ -553,7 +560,7 @@
                 ctx.drawImage(img, 0, 0, 32, 32);
                 const imageData = ctx.getImageData(0, 0, 32, 32).data;
 
-                let bestR = 25, bestG = 25, bestB = 30;
+                let bestR = 30, bestG = 30, bestB = 40;
                 let maxScore = -1;
 
                 for (let i = 0; i < imageData.length; i += 16) {
@@ -566,8 +573,8 @@
                     const chroma = max - min;
                     const brightness = (r * 299 + g * 587 + b * 114) / 1000;
 
-                    if (brightness > 20 && brightness < 220 && chroma > 15) {
-                        const score = chroma * 2 + (128 - Math.abs(brightness - 128));
+                    if (brightness > 25 && brightness < 230 && chroma > 18) {
+                        const score = chroma * 3 + (128 - Math.abs(brightness - 128));
                         if (score > maxScore) {
                             maxScore = score;
                             bestR = r;
@@ -577,8 +584,10 @@
                     }
                 }
 
-                // Horizontal Oval Gradient (ellipse 90% 45% at center)
-                ambientGlow.style.background = `radial-gradient(ellipse 90% 45% at 50% 50%, rgba(${bestR},${bestG},${bestB}, 0.60) 0%, rgba(${bestR},${bestG},${bestB}, 0.25) 50%, rgba(0,0,0,0) 85%)`;
+                state.dominantColorStr = `rgb(${Math.floor(bestR * 0.4)}, ${Math.floor(bestG * 0.4)}, ${Math.floor(bestB * 0.4)})`;
+                lyricsFullscreenView.style.backgroundColor = state.dominantColorStr;
+
+                ambientGlow.style.background = `radial-gradient(ellipse 75% 35% at 50% 50%, rgba(${bestR},${bestG},${bestB}, 0.80) 0%, rgba(${bestR},${bestG},${bestB}, 0.35) 50%, rgba(0,0,0,0) 80%)`;
             };
         }
 
@@ -684,15 +693,18 @@
             }
         }
 
-        // FETCH SYNCED LYRICS VIA LRCLIB API
+        // FETCH SYNCED LYRICS VIA LRCLIB API WITH MULTI-LINE REGEX FIX
         async function fetchTrackLyrics(trackName, artistName, durationSecs) {
             if (!trackName || !artistName) return;
             state.isLoadingLyrics = true;
             state.hasLyrics = false;
             state.syncedLyrics = [];
+            updateLyricsDisplay();
 
             try {
-                const url = `https://lrclib.net/api/get?track_name=${encodeURIComponent(trackName)}&artist_name=${encodeURIComponent(artistName)}&duration=${durationSecs}`;
+                const cleanTrackName = trackName.split('(')[0].trim();
+                const cleanArtistName = artistName.split(',')[0].trim();
+                const url = `https://lrclib.net/api/get?track_name=${encodeURIComponent(cleanTrackName)}&artist_name=${encodeURIComponent(cleanArtistName)}&duration=${durationSecs}`;
                 const res = await fetch(url);
                 
                 if (res.ok) {
@@ -713,18 +725,27 @@
         function parseLrcString(lrcText) {
             const lines = lrcText.split('\n');
             const parsed = [];
-            const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/;
+            // Supports [mm:ss.xx] and [mm:ss.xxx] formats cleanly
+            const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/g;
 
             lines.forEach(line => {
-                const match = timeRegex.exec(line);
-                if (match) {
-                    const mins = parseInt(match[1]);
-                    const secs = parseInt(match[2]);
-                    const totalSecs = mins * 60 + secs;
-                    const text = line.replace(timeRegex, '').trim();
-                    if (text) {
-                        parsed.push({ time: totalSecs, text: text });
-                    }
+                let match;
+                const timestamps = [];
+                // Reset regex index search per line
+                timeRegex.lastIndex = 0;
+                while ((match = timeRegex.exec(line)) !== null) {
+                    const mins = parseInt(match[1], 10);
+                    const secs = parseInt(match[2], 10);
+                    const msStr = match[3];
+                    const ms = parseInt(msStr.length === 2 ? msStr * 10 : msStr, 10);
+                    timestamps.push(mins * 60 + secs + ms / 1000);
+                }
+
+                const text = line.replace(/\[\d{2}:\d{2}\.\d{2,3}\]/g, '').trim();
+                if (text && timestamps.length > 0) {
+                    timestamps.forEach(t => {
+                        parsed.push({ time: t, text: text });
+                    });
                 }
             });
 
@@ -733,6 +754,8 @@
                 state.hasLyrics = true;
             }
         }
+
+        let lastDisplayedLyric = "";
 
         function updateLyricsDisplay() {
             if (!state.lyricsActive) {
@@ -761,16 +784,29 @@
                     curText = "♪ ... ♪";
                     nxtText = state.syncedLyrics[0]?.text || "";
                 }
+            } else {
+                curText = "No lyrics available";
+                nxtText = "";
             }
 
             if (state.lyricsType === '1') {
                 lyricsFullscreenView.classList.remove('hidden');
                 type2Container.classList.add('hidden');
+                if (fsCurrentLyric.textContent !== curText) {
+                    fsCurrentLyric.classList.remove('lyric-slide-in');
+                    void fsCurrentLyric.offsetWidth;
+                    fsCurrentLyric.classList.add('lyric-slide-in');
+                }
                 fsCurrentLyric.textContent = curText;
                 fsNextLyric.textContent = nxtText;
             } else {
                 lyricsFullscreenView.classList.add('hidden');
                 type2Container.classList.remove('hidden');
+                if (t2Current.textContent !== curText) {
+                    t2Current.classList.remove('lyric-slide-in');
+                    void t2Current.offsetWidth;
+                    t2Current.classList.add('lyric-slide-in');
+                }
                 t2Current.textContent = curText;
                 t2Next.textContent = nxtText;
             }
@@ -820,10 +856,12 @@
 
                     state.trackDuration = Math.floor(data.item.duration_ms / 1000);
 
-                    // Re-fetch lyrics if song changed
+                    // Re-fetch lyrics on track change and reset state
                     if (newTrackName !== state.currentTrackName || newArtistName !== state.currentArtistName) {
                         state.currentTrackName = newTrackName;
                         state.currentArtistName = newArtistName;
+                        state.syncedLyrics = [];
+                        state.hasLyrics = false;
                         fetchTrackLyrics(newTrackName, newArtistName, state.trackDuration);
                     }
                     
