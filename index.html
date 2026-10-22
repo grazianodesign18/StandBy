@@ -205,7 +205,7 @@
             <section class="flex items-center justify-center gap-5 text-zinc-400 text-xs font-extrabold tracking-wide">
                 <div class="flex items-center gap-1.5">
                     <i id="weather-icon" class="fa-solid fa-sun text-zinc-400 text-xs"></i>
-                    <span id="weather-temp" class="text-zinc-200">22°C</span>
+                    <span id="weather-temp" class="text-zinc-200">72°F</span>
                     <span id="weather-city" class="text-[10px] text-zinc-600 uppercase hidden sm:inline">Lakeshore</span>
                 </div>
                 <span class="text-zinc-800">•</span>
@@ -218,7 +218,7 @@
         </main>
     </div>
 
-    <!-- SPOTIFY TRACK SELECTOR OVERLAY -->
+    <!-- SPOTIFY TRACK/ALBUM SELECTOR OVERLAY -->
     <div id="spotify-drawer" class="fixed inset-0 bg-black/90 backdrop-blur-lg z-50 hidden flex items-center justify-center p-4">
         <div class="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl p-5 flex flex-col gap-4 max-h-[85vh]">
             <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
@@ -234,11 +234,11 @@
             <!-- Menu Tabs -->
             <div class="flex gap-2 border-b border-zinc-800/80 pb-3 text-xs font-bold">
                 <button id="tab-album" class="px-3 py-1.5 rounded-full bg-white text-black transition">Album</button>
-                <button id="tab-recent" class="px-3 py-1.5 rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition">Recent</button>
+                <button id="tab-recent" class="px-3 py-1.5 rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition">Recent Albums</button>
                 <button id="tab-saved" class="px-3 py-1.5 rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition">Liked Songs</button>
             </div>
 
-            <!-- Song List Container -->
+            <!-- Content List Container -->
             <div id="drawer-track-list" class="flex flex-col gap-1 overflow-y-auto custom-scroll pr-1 max-h-[50vh]">
                 <p class="text-xs text-zinc-500 text-center py-6">Loading tracks...</p>
             </div>
@@ -269,8 +269,8 @@
                 <div class="flex items-center justify-between">
                     <span class="text-zinc-300">Temperature Unit</span>
                     <div class="flex gap-1 bg-zinc-900 p-1 rounded-lg border border-zinc-800">
-                        <button id="unit-c" class="px-2.5 py-0.5 rounded-md bg-zinc-700 text-white font-extrabold">°C</button>
-                        <button id="unit-f" class="px-2.5 py-0.5 rounded-md text-zinc-400 font-extrabold">°F</button>
+                        <button id="unit-c" class="px-2.5 py-0.5 rounded-md text-zinc-400 font-extrabold">°C</button>
+                        <button id="unit-f" class="px-2.5 py-0.5 rounded-md bg-zinc-700 text-white font-extrabold">°F</button>
                     </div>
                 </div>
 
@@ -286,7 +286,7 @@
     <script>
         const state = {
             is12h: true,
-            tempUnit: 'C',
+            tempUnit: localStorage.getItem('standby_temp_unit') || 'F',
             tempC: 22,
             burnIn: true,
             spotifyClientId: 'dac8f42143164aa28813f12d9a23e2f7',
@@ -304,7 +304,8 @@
             wakeLock: null,
             currentAlbumId: null,
             activeTab: 'album',
-            currentTrackUri: null
+            currentTrackUri: null,
+            viewingAlbumId: null // used when browsing an album from history
         };
 
         const floatingToolbar = document.getElementById('floating-toolbar');
@@ -348,9 +349,24 @@
         const unitF = document.getElementById('unit-f');
         const spotifyAccountStatus = document.getElementById('spotify-account-status');
         const logoutSpotifyBtn = document.getElementById('logout-spotify-btn');
+        const weatherTemp = document.getElementById('weather-temp');
 
-        // Dynamic base redirect URI matching active host and path
         const REDIRECT_URI = window.location.origin + window.location.pathname.split('?')[0].split('#')[0];
+
+        // Initialize Temperature UI based on saved preference
+        function applyTempUnitUI() {
+            if (state.tempUnit === 'F') {
+                unitF.className = 'px-2.5 py-0.5 rounded-md bg-zinc-700 text-white font-extrabold';
+                unitC.className = 'px-2.5 py-0.5 rounded-md text-zinc-400 font-extrabold';
+                const tempF = Math.round((state.tempC * 9/5) + 32);
+                weatherTemp.textContent = `${tempF}°F`;
+            } else {
+                unitC.className = 'px-2.5 py-0.5 rounded-md bg-zinc-700 text-white font-extrabold';
+                unitF.className = 'px-2.5 py-0.5 rounded-md text-zinc-400 font-extrabold';
+                weatherTemp.textContent = `${state.tempC}°C`;
+            }
+        }
+        applyTempUnitUI();
 
         async function requestWakeLock() {
             if ('wakeLock' in navigator) {
@@ -632,9 +648,24 @@
             }
         }
 
+        async function loadAlbumTracks(albumId, albumUri, albumName) {
+            drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">Loading album tracks...</p>';
+            drawerHeaderTitle.textContent = albumName || "Album Tracks";
+            try {
+                const res = await fetch(`https://api.spotify.com/v1/albums/${albumId}`, {
+                    headers: { 'Authorization': `Bearer ${state.accessToken}` }
+                });
+                const albumData = await res.json();
+                renderTrackList(albumData.tracks.items, albumData.uri, true);
+            } catch(e) {
+                drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">Failed to load album tracks</p>';
+            }
+        }
+
         async function loadDrawerTabContent(tab) {
             state.activeTab = tab;
-            drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">Loading tracks...</p>';
+            state.viewingAlbumId = null;
+            drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">Loading...</p>';
             
             [tabAlbum, tabRecent, tabSaved].forEach(btn => {
                 btn.className = "px-3 py-1.5 rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition";
@@ -658,16 +689,27 @@
                 }
             } else if (tab === 'recent') {
                 tabRecent.className = "px-3 py-1.5 rounded-full bg-white text-black transition font-bold";
-                drawerHeaderTitle.textContent = "Recently Played";
+                drawerHeaderTitle.textContent = "Recent Albums & Singles";
                 try {
-                    const res = await fetch('https://api.spotify.com/v1/me/player/recently-played?limit=20', {
+                    const res = await fetch('https://api.spotify.com/v1/me/player/recently-played?limit=30', {
                         headers: { 'Authorization': `Bearer ${state.accessToken}` }
                     });
                     const data = await res.json();
-                    const tracks = data.items.map(item => item.track);
-                    renderTrackList(tracks);
+                    
+                    // Filter unique albums/singles
+                    const seenAlbums = new Set();
+                    const albumsList = [];
+                    data.items.forEach(item => {
+                        const alb = item.track.album;
+                        if (alb && !seenAlbums.has(alb.id)) {
+                            seenAlbums.add(alb.id);
+                            albumsList.push(alb);
+                        }
+                    });
+
+                    renderAlbumList(albumsList);
                 } catch(e) {
-                    drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">Failed to load recent tracks</p>';
+                    drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">Failed to load recent albums</p>';
                 }
             } else if (tab === 'saved') {
                 tabSaved.className = "px-3 py-1.5 rounded-full bg-white text-black transition font-bold";
@@ -685,13 +727,54 @@
             }
         }
 
-        function renderTrackList(tracks, contextUri = null) {
+        function renderAlbumList(albums) {
+            if (!albums || albums.length === 0) {
+                drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">No recent albums found</p>';
+                return;
+            }
+
+            drawerTrackList.innerHTML = '';
+            albums.forEach((album) => {
+                const row = document.createElement('div');
+                row.className = `flex items-center justify-between p-2 rounded-xl cursor-pointer transition hover:bg-zinc-900 text-zinc-300`;
+                
+                const artUrl = album.images[0]?.url || 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=150&auto=format&fit=crop&q=80';
+                const artistNames = album.artists ? album.artists.map(a => a.name).join(', ') : 'Unknown Artist';
+                const albumTypeLabel = album.album_type === 'single' ? 'Single' : 'Album';
+
+                row.innerHTML = `
+                    <div class="flex items-center gap-3 min-w-0 pr-2">
+                        <img src="${artUrl}" class="w-10 h-10 rounded-lg object-cover flex-shrink-0 border border-white/10">
+                        <div class="flex flex-col min-w-0 text-left">
+                            <span class="text-xs truncate text-white font-bold">${album.name}</span>
+                            <span class="text-[10px] text-zinc-500 truncate">${artistNames} • <span class="uppercase">${albumTypeLabel}</span></span>
+                        </div>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-zinc-600 text-xs flex-shrink-0"></i>
+                `;
+
+                row.addEventListener('click', () => loadAlbumTracks(album.id, album.uri, album.name));
+                drawerTrackList.appendChild(row);
+            });
+        }
+
+        function renderTrackList(tracks, contextUri = null, isSubView = false) {
             if (!tracks || tracks.length === 0) {
                 drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">No tracks found</p>';
                 return;
             }
 
             drawerTrackList.innerHTML = '';
+            
+            // Add back button if viewing album tracks from recent list
+            if (isSubView && state.activeTab === 'recent') {
+                const backRow = document.createElement('div');
+                backRow.className = `flex items-center gap-2 p-2 rounded-xl cursor-pointer transition bg-zinc-900/60 hover:bg-zinc-900 text-zinc-400 mb-2 font-bold text-xs`;
+                backRow.innerHTML = `<i class="fa-solid fa-arrow-left"></i><span>Back to Recent Albums</span>`;
+                backRow.addEventListener('click', () => loadDrawerTabContent('recent'));
+                drawerTrackList.appendChild(backRow);
+            }
+
             tracks.forEach((track, index) => {
                 const isPlayingThis = state.currentTrackUri === track.uri;
                 const row = document.createElement('div');
@@ -702,12 +785,12 @@
                 row.innerHTML = `
                     <div class="flex items-center gap-3 min-w-0 pr-2">
                         <span class="text-[10px] text-zinc-500 w-4 text-center flex-shrink-0 font-bold">${index + 1}</span>
-                        <div class="flex flex-col min-w-0">
+                        <div class="flex flex-col min-w-0 text-left">
                             <span class="text-xs truncate ${isPlayingThis ? 'text-green-400 font-extrabold' : 'text-white'}">${track.name}</span>
                             <span class="text-[10px] text-zinc-500 truncate">${artistName}</span>
                         </div>
                     </div>
-                    <i class="fa-solid ${isPlayingThis ? 'fa-volume-high text-green-400' : 'fa-play text-zinc-600 group-hover:text-white'} text-xs flex-shrink-0"></i>
+                    <i class="fa-solid ${isPlayingThis ? 'fa-volume-high text-green-400' : 'fa-play text-zinc-600'} text-xs flex-shrink-0"></i>
                 `;
 
                 row.addEventListener('click', () => playTrackByUri(track.uri, contextUri));
@@ -839,17 +922,14 @@
 
         unitC.addEventListener('click', () => {
             state.tempUnit = 'C';
-            unitC.className = 'px-2.5 py-0.5 rounded-md bg-zinc-700 text-white font-extrabold';
-            unitF.className = 'px-2.5 py-0.5 rounded-md text-zinc-400 font-extrabold';
-            document.getElementById('weather-temp').textContent = `${state.tempC}°C`;
+            localStorage.setItem('standby_temp_unit', 'C');
+            applyTempUnitUI();
         });
 
         unitF.addEventListener('click', () => {
             state.tempUnit = 'F';
-            unitF.className = 'px-2.5 py-0.5 rounded-md bg-zinc-700 text-white font-extrabold';
-            unitC.className = 'px-2.5 py-0.5 rounded-md text-zinc-400 font-extrabold';
-            const tempF = Math.round((state.tempC * 9/5) + 32);
-            document.getElementById('weather-temp').textContent = `${tempF}°F`;
+            localStorage.setItem('standby_temp_unit', 'F');
+            applyTempUnitUI();
         });
 
         handleSpotifyCallback();
