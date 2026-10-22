@@ -232,10 +232,11 @@
             </div>
 
             <!-- Menu Tabs -->
-            <div class="flex gap-2 border-b border-zinc-800/80 pb-3 text-xs font-bold">
-                <button id="tab-album" class="px-3 py-1.5 rounded-full bg-white text-black transition">Album</button>
-                <button id="tab-recent" class="px-3 py-1.5 rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition">Recent Albums</button>
-                <button id="tab-saved" class="px-3 py-1.5 rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition">Liked Songs</button>
+            <div class="flex gap-1.5 border-b border-zinc-800/80 pb-3 text-[11px] font-bold overflow-x-auto custom-scroll">
+                <button id="tab-album" class="px-3 py-1.5 rounded-full bg-white text-black transition flex-shrink-0">Album</button>
+                <button id="tab-recent" class="px-3 py-1.5 rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition flex-shrink-0">Recent</button>
+                <button id="tab-saved-albums" class="px-3 py-1.5 rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition flex-shrink-0">Saved</button>
+                <button id="tab-saved" class="px-3 py-1.5 rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition flex-shrink-0">Liked Songs</button>
             </div>
 
             <!-- Content List Container -->
@@ -305,7 +306,7 @@
             currentAlbumId: null,
             activeTab: 'album',
             currentTrackUri: null,
-            viewingAlbumId: null // used when browsing an album from history
+            viewingAlbumId: null
         };
 
         const floatingToolbar = document.getElementById('floating-toolbar');
@@ -318,6 +319,7 @@
 
         const tabAlbum = document.getElementById('tab-album');
         const tabRecent = document.getElementById('tab-recent');
+        const tabSavedAlbums = document.getElementById('tab-saved-albums');
         const tabSaved = document.getElementById('tab-saved');
 
         const ambientGlow = document.getElementById('ambient-glow');
@@ -353,7 +355,6 @@
 
         const REDIRECT_URI = window.location.origin + window.location.pathname.split('?')[0].split('#')[0];
 
-        // Initialize Temperature UI based on saved preference
         function applyTempUnitUI() {
             if (state.tempUnit === 'F') {
                 unitF.className = 'px-2.5 py-0.5 rounded-md bg-zinc-700 text-white font-extrabold';
@@ -667,12 +668,12 @@
             state.viewingAlbumId = null;
             drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">Loading...</p>';
             
-            [tabAlbum, tabRecent, tabSaved].forEach(btn => {
-                btn.className = "px-3 py-1.5 rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition";
+            [tabAlbum, tabRecent, tabSavedAlbums, tabSaved].forEach(btn => {
+                btn.className = "px-3 py-1.5 rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition flex-shrink-0";
             });
 
             if (tab === 'album') {
-                tabAlbum.className = "px-3 py-1.5 rounded-full bg-white text-black transition font-bold";
+                tabAlbum.className = "px-3 py-1.5 rounded-full bg-white text-black transition font-bold flex-shrink-0";
                 drawerHeaderTitle.textContent = "Current Album";
                 if (!state.currentAlbumId) {
                     drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">No album playing</p>';
@@ -688,31 +689,45 @@
                     drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">Failed to load album tracks</p>';
                 }
             } else if (tab === 'recent') {
-                tabRecent.className = "px-3 py-1.5 rounded-full bg-white text-black transition font-bold";
-                drawerHeaderTitle.textContent = "Recent Albums & Singles";
+                tabRecent.className = "px-3 py-1.5 rounded-full bg-white text-black transition font-bold flex-shrink-0";
+                drawerHeaderTitle.textContent = "Last 8 Albums";
                 try {
-                    const res = await fetch('https://api.spotify.com/v1/me/player/recently-played?limit=30', {
+                    const res = await fetch('https://api.spotify.com/v1/me/player/recently-played?limit=50', {
                         headers: { 'Authorization': `Bearer ${state.accessToken}` }
                     });
                     const data = await res.json();
                     
-                    // Filter unique albums/singles
+                    // Strictly deduplicate and cap to last 8 unique albums
                     const seenAlbums = new Set();
-                    const albumsList = [];
-                    data.items.forEach(item => {
-                        const alb = item.track.album;
+                    const last8Albums = [];
+                    for (const item of data.items) {
+                        const alb = item.track?.album;
                         if (alb && !seenAlbums.has(alb.id)) {
                             seenAlbums.add(alb.id);
-                            albumsList.push(alb);
+                            last8Albums.push(alb);
+                            if (last8Albums.length === 8) break;
                         }
-                    });
+                    }
 
-                    renderAlbumList(albumsList);
+                    renderAlbumList(last8Albums);
                 } catch(e) {
                     drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">Failed to load recent albums</p>';
                 }
+            } else if (tab === 'saved-albums') {
+                tabSavedAlbums.className = "px-3 py-1.5 rounded-full bg-white text-black transition font-bold flex-shrink-0";
+                drawerHeaderTitle.textContent = "Saved Albums";
+                try {
+                    const res = await fetch('https://api.spotify.com/v1/me/albums?limit=30', {
+                        headers: { 'Authorization': `Bearer ${state.accessToken}` }
+                    });
+                    const data = await res.json();
+                    const savedAlbums = data.items.map(item => item.album);
+                    renderAlbumList(savedAlbums);
+                } catch(e) {
+                    drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">Failed to load saved albums</p>';
+                }
             } else if (tab === 'saved') {
-                tabSaved.className = "px-3 py-1.5 rounded-full bg-white text-black transition font-bold";
+                tabSaved.className = "px-3 py-1.5 rounded-full bg-white text-black transition font-bold flex-shrink-0";
                 drawerHeaderTitle.textContent = "Liked Songs";
                 try {
                     const res = await fetch('https://api.spotify.com/v1/me/tracks?limit=30', {
@@ -729,7 +744,7 @@
 
         function renderAlbumList(albums) {
             if (!albums || albums.length === 0) {
-                drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">No recent albums found</p>';
+                drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">No albums found</p>';
                 return;
             }
 
@@ -766,12 +781,12 @@
 
             drawerTrackList.innerHTML = '';
             
-            // Add back button if viewing album tracks from recent list
-            if (isSubView && state.activeTab === 'recent') {
+            if (isSubView && (state.activeTab === 'recent' || state.activeTab === 'saved-albums')) {
                 const backRow = document.createElement('div');
                 backRow.className = `flex items-center gap-2 p-2 rounded-xl cursor-pointer transition bg-zinc-900/60 hover:bg-zinc-900 text-zinc-400 mb-2 font-bold text-xs`;
-                backRow.innerHTML = `<i class="fa-solid fa-arrow-left"></i><span>Back to Recent Albums</span>`;
-                backRow.addEventListener('click', () => loadDrawerTabContent('recent'));
+                const tabLabel = state.activeTab === 'recent' ? 'Recent Albums' : 'Saved Albums';
+                backRow.innerHTML = `<i class="fa-solid fa-arrow-left"></i><span>Back to ${tabLabel}</span>`;
+                backRow.addEventListener('click', () => loadDrawerTabContent(state.activeTab));
                 drawerTrackList.appendChild(backRow);
             }
 
@@ -848,6 +863,7 @@
 
         tabAlbum.addEventListener('click', () => loadDrawerTabContent('album'));
         tabRecent.addEventListener('click', () => loadDrawerTabContent('recent'));
+        tabSavedAlbums.addEventListener('click', () => loadDrawerTabContent('saved-albums'));
         tabSaved.addEventListener('click', () => loadDrawerTabContent('saved'));
 
         trackScrubber.addEventListener('input', (e) => {
