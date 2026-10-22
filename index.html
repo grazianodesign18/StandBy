@@ -118,33 +118,24 @@
             transition: transform 1.5s ease-in-out;
         }
         .custom-scroll::-webkit-scrollbar {
-            width: 4px;
+            width: 0px;
+            background: transparent;
         }
-        .custom-scroll::-webkit-scrollbar-track {
-            background: rgba(255,255,255,0.05);
-        }
-        .custom-scroll::-webkit-scrollbar-thumb {
-            background: rgba(255,255,255,0.2);
-            border-radius: 2px;
-        }
-
-        @keyframes slideUpIn {
-            0% { transform: translateY(24px); opacity: 0; }
+        
+        /* Smooth upward sliding for Type 2 inline lyrics */
+        @keyframes smoothSlideUp {
+            0% { transform: translateY(18px); opacity: 0; }
             100% { transform: translateY(0); opacity: 1; }
         }
-        @keyframes slideUpOut {
-            0% { transform: translateY(0); opacity: 1; }
-            100% { transform: translateY(-24px); opacity: 0; }
-        }
-        .lyric-slide-in {
-            animation: slideUpIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        .smooth-lyric-slide {
+            animation: smoothSlideUp 0.6s cubic-bezier(0.25, 1, 0.5, 1) forwards;
         }
     </style>
 </head>
 <body class="h-full w-full bg-amoled flex items-center justify-center p-4 sm:p-8 select-none relative">
 
-    <!-- BRIGHTER HORIZONTAL OVAL GRADIENT BACKGROUND -->
-    <div id="ambient-glow" class="fixed -inset-10 pointer-events-none transition-all duration-1000 ease-out z-0 opacity-60"></div>
+    <!-- VERTICALLY TALL & HORIZONTALLY NARROW OVAL GRADIENT -->
+    <div id="ambient-glow" class="fixed -inset-10 pointer-events-none transition-all duration-1000 ease-out z-0 opacity-70"></div>
 
     <!-- Top Floating Toolbar -->
     <header id="floating-toolbar" class="fixed top-3 right-6 flex items-center gap-3 z-30 opacity-0 transition-opacity duration-500 pointer-events-none">
@@ -157,14 +148,13 @@
         </button>
     </header>
 
-    <!-- TYPE 1 FULLSCREEN LYRICS OVERLAY (Matches gradient color with 100% opacity) -->
-    <div id="lyrics-fullscreen-view" class="fixed inset-0 z-40 hidden flex flex-col items-center justify-center p-8 text-center transition-colors duration-700" style="background-color: #050508;">
-        <button id="close-fullscreen-lyrics" class="absolute top-6 right-8 text-zinc-400 hover:text-white text-lg z-50">
+    <!-- TYPE 1 FULLSCREEN SCROLLING LYRICS OVERLAY (Matches Image 2 Layout) -->
+    <div id="lyrics-fullscreen-view" class="fixed inset-0 z-40 hidden flex flex-col items-center justify-start transition-colors duration-700" style="background-color: #041d42;">
+        <button id="close-fullscreen-lyrics" class="fixed top-6 right-8 text-white/60 hover:text-white text-xl z-50 p-2">
             <i class="fa-solid fa-xmark"></i>
         </button>
-        <div id="fullscreen-lyrics-container" class="max-w-xl flex flex-col gap-6 overflow-hidden py-12">
-            <p class="text-2xl sm:text-3xl font-extrabold text-white transition-all duration-300 lyric-slide-in" id="fs-current-lyric">Searching lyrics...</p>
-            <p class="text-lg sm:text-xl font-bold text-zinc-400/60 transition-all duration-300" id="fs-next-lyric"></p>
+        <div id="fs-lyrics-scroll-container" class="w-full max-w-xl h-full overflow-y-auto custom-scroll px-8 py-32 flex flex-col gap-6 text-left scroll-smooth">
+            <p id="fs-lyrics-status" class="text-xl font-bold text-white/50 text-center my-auto">Searching lyrics...</p>
         </div>
     </div>
 
@@ -253,9 +243,9 @@
             </section>
 
             <!-- TYPE 2 INLINE LYRICS CONTAINER -->
-            <div id="type2-lyrics-container" class="w-full max-w-sm flex flex-col items-center text-center h-12 justify-center overflow-hidden hidden">
-                <p id="t2-current" class="text-xs font-bold text-white transition-all duration-300 lyric-slide-in truncate px-2"></p>
-                <p id="t2-next" class="text-[10px] font-medium text-zinc-500 transition-all duration-300 truncate px-2 mt-0.5"></p>
+            <div id="type2-lyrics-container" class="w-full max-w-sm flex flex-col items-center text-center h-14 justify-center overflow-hidden hidden">
+                <p id="t2-current" class="text-xs font-bold text-white transition-all duration-300 smooth-lyric-slide truncate px-2"></p>
+                <p id="t2-next" class="text-[10px] font-medium text-zinc-400/60 transition-all duration-300 truncate px-2 mt-0.5"></p>
             </div>
 
         </main>
@@ -372,7 +362,8 @@
             syncedLyrics: [],
             hasLyrics: false,
             isLoadingLyrics: false,
-            dominantColorStr: '#050508'
+            dominantColorStr: '#041d42',
+            lastActiveLyricIdx: -1
         };
 
         const floatingToolbar = document.getElementById('floating-toolbar');
@@ -414,8 +405,7 @@
         
         const lyricsFullscreenView = document.getElementById('lyrics-fullscreen-view');
         const closeFullscreenLyrics = document.getElementById('close-fullscreen-lyrics');
-        const fsCurrentLyric = document.getElementById('fs-current-lyric');
-        const fsNextLyric = document.getElementById('fs-next-lyric');
+        const fsLyricsScrollContainer = document.getElementById('fs-lyrics-scroll-container');
         const type2Container = document.getElementById('type2-lyrics-container');
         const t2Current = document.getElementById('t2-current');
         const t2Next = document.getElementById('t2-next');
@@ -539,11 +529,11 @@
         window.addEventListener('mousemove', showToolbar, { passive: true });
         window.addEventListener('click', showToolbar, { passive: true });
 
-        // BRIGHTER HORIZONTAL OVAL GRADIENT (ellipse 75% 35%)
+        // VERTICALLY TALL, HORIZONTALLY THINNER OVAL GRADIENT (ellipse 60% 75%)
         function updateAmbientColor(imgSrc) {
             if (!state.glowEnabled) {
                 ambientGlow.style.background = 'transparent';
-                state.dominantColorStr = '#050508';
+                state.dominantColorStr = '#041d42';
                 return;
             }
             if (state.currentImageSrc === imgSrc) return;
@@ -560,7 +550,7 @@
                 ctx.drawImage(img, 0, 0, 32, 32);
                 const imageData = ctx.getImageData(0, 0, 32, 32).data;
 
-                let bestR = 30, bestG = 30, bestB = 40;
+                let bestR = 20, bestG = 40, bestB = 80;
                 let maxScore = -1;
 
                 for (let i = 0; i < imageData.length; i += 16) {
@@ -573,7 +563,7 @@
                     const chroma = max - min;
                     const brightness = (r * 299 + g * 587 + b * 114) / 1000;
 
-                    if (brightness > 25 && brightness < 230 && chroma > 18) {
+                    if (brightness > 20 && brightness < 230 && chroma > 15) {
                         const score = chroma * 3 + (128 - Math.abs(brightness - 128));
                         if (score > maxScore) {
                             maxScore = score;
@@ -584,10 +574,10 @@
                     }
                 }
 
-                state.dominantColorStr = `rgb(${Math.floor(bestR * 0.4)}, ${Math.floor(bestG * 0.4)}, ${Math.floor(bestB * 0.4)})`;
+                state.dominantColorStr = `rgb(${Math.floor(bestR * 0.35)}, ${Math.floor(bestG * 0.35)}, ${Math.floor(bestB * 0.35)})`;
                 lyricsFullscreenView.style.backgroundColor = state.dominantColorStr;
 
-                ambientGlow.style.background = `radial-gradient(ellipse 75% 35% at 50% 50%, rgba(${bestR},${bestG},${bestB}, 0.80) 0%, rgba(${bestR},${bestG},${bestB}, 0.35) 50%, rgba(0,0,0,0) 80%)`;
+                ambientGlow.style.background = `radial-gradient(ellipse 60% 75% at 50% 50%, rgba(${bestR},${bestG},${bestB}, 0.85) 0%, rgba(${bestR},${bestG},${bestB}, 0.30) 55%, rgba(0,0,0,0) 85%)`;
             };
         }
 
@@ -693,12 +683,13 @@
             }
         }
 
-        // FETCH SYNCED LYRICS VIA LRCLIB API WITH MULTI-LINE REGEX FIX
         async function fetchTrackLyrics(trackName, artistName, durationSecs) {
             if (!trackName || !artistName) return;
             state.isLoadingLyrics = true;
             state.hasLyrics = false;
             state.syncedLyrics = [];
+            state.lastActiveLyricIdx = -1;
+            renderType1FullLyrics();
             updateLyricsDisplay();
 
             try {
@@ -712,26 +703,26 @@
                     if (data && data.syncedLyrics) {
                         parseLrcString(data.syncedLyrics);
                     } else if (data && data.plainLyrics) {
-                        state.syncedLyrics = [{ time: 0, text: data.plainLyrics }];
+                        const lines = data.plainLyrics.split('\n').filter(l => l.trim() !== '');
+                        state.syncedLyrics = lines.map((l, i) => ({ time: i * 4, text: l }));
                         state.hasLyrics = true;
                     }
                 }
             } catch(e) {}
 
             state.isLoadingLyrics = false;
+            renderType1FullLyrics();
             updateLyricsDisplay();
         }
 
         function parseLrcString(lrcText) {
             const lines = lrcText.split('\n');
             const parsed = [];
-            // Supports [mm:ss.xx] and [mm:ss.xxx] formats cleanly
             const timeRegex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/g;
 
             lines.forEach(line => {
                 let match;
                 const timestamps = [];
-                // Reset regex index search per line
                 timeRegex.lastIndex = 0;
                 while ((match = timeRegex.exec(line)) !== null) {
                     const mins = parseInt(match[1], 10);
@@ -755,7 +746,31 @@
             }
         }
 
-        let lastDisplayedLyric = "";
+        // RENDER FULL LYRICS LIST FOR TYPE 1 (Spotify Fullscreen Mode)
+        function renderType1FullLyrics() {
+            fsLyricsScrollContainer.innerHTML = '';
+
+            if (state.isLoadingLyrics) {
+                fsLyricsScrollContainer.innerHTML = '<p class="text-2xl font-extrabold text-white/50 text-center my-auto">Searching lyrics...</p>';
+                return;
+            }
+
+            if (!state.hasLyrics || state.syncedLyrics.length === 0) {
+                fsLyricsScrollContainer.innerHTML = '<p class="text-2xl font-extrabold text-white/50 text-center my-auto">No lyrics available</p>';
+                return;
+            }
+
+            state.syncedLyrics.forEach((lyricObj, idx) => {
+                const p = document.createElement('p');
+                p.id = `fs-lyric-line-${idx}`;
+                p.className = 'text-2xl sm:text-3xl font-extrabold text-white/35 transition-all duration-500 leading-snug cursor-pointer hover:text-white/70';
+                p.textContent = lyricObj.text;
+                p.addEventListener('click', () => {
+                    seekSpotifyPlayback(Math.floor(lyricObj.time * 1000));
+                });
+                fsLyricsScrollContainer.appendChild(p);
+            });
+        }
 
         function updateLyricsDisplay() {
             if (!state.lyricsActive) {
@@ -764,48 +779,55 @@
                 return;
             }
 
-            let curText = "No lyrics available";
-            let nxtText = "";
-
-            if (state.isLoadingLyrics) {
-                curText = "Searching lyrics...";
-            } else if (state.hasLyrics && state.syncedLyrics.length > 0) {
-                let activeIdx = -1;
+            let activeIdx = -1;
+            if (state.hasLyrics && state.syncedLyrics.length > 0) {
                 for (let i = 0; i < state.syncedLyrics.length; i++) {
                     if (state.trackProgress >= state.syncedLyrics[i].time) {
                         activeIdx = i;
                     }
                 }
-
-                if (activeIdx >= 0) {
-                    curText = state.syncedLyrics[activeIdx].text;
-                    nxtText = state.syncedLyrics[activeIdx + 1]?.text || "";
-                } else {
-                    curText = "♪ ... ♪";
-                    nxtText = state.syncedLyrics[0]?.text || "";
-                }
-            } else {
-                curText = "No lyrics available";
-                nxtText = "";
             }
 
             if (state.lyricsType === '1') {
                 lyricsFullscreenView.classList.remove('hidden');
                 type2Container.classList.add('hidden');
-                if (fsCurrentLyric.textContent !== curText) {
-                    fsCurrentLyric.classList.remove('lyric-slide-in');
-                    void fsCurrentLyric.offsetWidth;
-                    fsCurrentLyric.classList.add('lyric-slide-in');
+
+                if (state.hasLyrics && activeIdx >= 0 && activeIdx !== state.lastActiveLyricIdx) {
+                    state.lastActiveLyricIdx = activeIdx;
+                    
+                    state.syncedLyrics.forEach((_, idx) => {
+                        const lineEl = document.getElementById(`fs-lyric-line-${idx}`);
+                        if (lineEl) {
+                            if (idx === activeIdx) {
+                                lineEl.className = 'text-2xl sm:text-3xl font-extrabold text-white scale-105 origin-left transition-all duration-500 leading-snug';
+                                lineEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            } else {
+                                lineEl.className = 'text-2xl sm:text-3xl font-extrabold text-white/35 transition-all duration-500 leading-snug hover:text-white/70';
+                            }
+                        }
+                    });
                 }
-                fsCurrentLyric.textContent = curText;
-                fsNextLyric.textContent = nxtText;
             } else {
                 lyricsFullscreenView.classList.add('hidden');
                 type2Container.classList.remove('hidden');
+
+                let curText = "No lyrics available";
+                let nxtText = "";
+
+                if (state.isLoadingLyrics) {
+                    curText = "Searching lyrics...";
+                } else if (state.hasLyrics && activeIdx >= 0) {
+                    curText = state.syncedLyrics[activeIdx].text;
+                    nxtText = state.syncedLyrics[activeIdx + 1]?.text || "";
+                } else if (state.hasLyrics && activeIdx < 0) {
+                    curText = "♪ ... ♪";
+                    nxtText = state.syncedLyrics[0]?.text || "";
+                }
+
                 if (t2Current.textContent !== curText) {
-                    t2Current.classList.remove('lyric-slide-in');
+                    t2Current.classList.remove('smooth-lyric-slide');
                     void t2Current.offsetWidth;
-                    t2Current.classList.add('lyric-slide-in');
+                    t2Current.classList.add('smooth-lyric-slide');
                 }
                 t2Current.textContent = curText;
                 t2Next.textContent = nxtText;
@@ -856,12 +878,10 @@
 
                     state.trackDuration = Math.floor(data.item.duration_ms / 1000);
 
-                    // Re-fetch lyrics on track change and reset state
+                    // Re-fetch lyrics on track change
                     if (newTrackName !== state.currentTrackName || newArtistName !== state.currentArtistName) {
                         state.currentTrackName = newTrackName;
                         state.currentArtistName = newArtistName;
-                        state.syncedLyrics = [];
-                        state.hasLyrics = false;
                         fetchTrackLyrics(newTrackName, newArtistName, state.trackDuration);
                     }
                     
@@ -1200,6 +1220,8 @@
             } else {
                 lyricsToggleBtn.className = 'text-zinc-500 hover:text-white transition text-xs ml-1';
             }
+            state.lastActiveLyricIdx = -1;
+            renderType1FullLyrics();
             updateLyricsDisplay();
         });
 
@@ -1265,6 +1287,8 @@
             state.lyricsType = '1';
             localStorage.setItem('standby_lyrics_type', '1');
             applyLyricsStyleUI();
+            state.lastActiveLyricIdx = -1;
+            renderType1FullLyrics();
             updateLyricsDisplay();
         });
 
