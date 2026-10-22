@@ -1,284 +1,4 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>StandBy AMOLED Clock</title>
-    
-    <!-- PWA Meta Tags -->
-    <meta name="theme-color" content="#000000">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="mobile-web-app-capable" content="yes">
-    
-    <!-- Dynamic Manifest Injection -->
-    <script>
-        const manifestData = {
-            "name": "StandBy Clock",
-            "short_name": "StandBy",
-            "start_url": "./",
-            "display": "standalone",
-            "orientation": "landscape",
-            "background_color": "#000000",
-            "theme_color": "#000000",
-            "icons": [
-                {
-                    "src": "https://cdn-icons-png.flaticon.com/512/3103/3103181.png",
-                    "sizes": "512x512",
-                    "type": "image/png",
-                    "purpose": "any maskable"
-                }
-            ]
-        };
-        const stringManifest = JSON.stringify(manifestData);
-        const blob = new Blob([stringManifest], {type: 'application/json'});
-        const manifestURL = URL.createObjectURL(blob);
-        const link = document.createElement('link');
-        link.rel = 'manifest';
-        link.href = manifestURL;
-        document.head.appendChild(link);
-    </script>
-
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Fallback SHA-256 for cryptographic challenge generation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-sha256/0.9.0/sha256.min.js"></script>
-    
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Unbounded:wght@700;800&display=swap" rel="stylesheet">
-
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    fontFamily: {
-                        clock: ['Unbounded', 'sans-serif'],
-                        sans: ['Plus Jakarta Sans', 'sans-serif'],
-                    },
-                    colors: {
-                        amoled: '#000000',
-                    }
-                }
-            }
-        }
-    </script>
-
-    <style>
-        * {
-            user-select: none;
-            -webkit-user-select: none;
-            -webkit-touch-callout: none;
-        }
-        body {
-            background-color: #000000;
-            color: #ffffff;
-            font-family: 'Plus Jakarta Sans', sans-serif;
-            overflow: hidden;
-            touch-action: manipulation;
-        }
-        .clock-num {
-            font-family: 'Unbounded', sans-serif;
-            font-weight: 800;
-            font-variant-numeric: tabular-nums;
-            letter-spacing: 0.02em;
-        }
-        input[type=range] {
-            -webkit-appearance: none;
-            background: transparent;
-        }
-        input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            height: 12px;
-            width: 12px;
-            border-radius: 50%;
-            background: #ffffff;
-            cursor: pointer;
-            margin-top: -4.5px;
-        }
-        input[type=range]::-webkit-slider-runnable-track {
-            width: 100%;
-            height: 3px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 2px;
-        }
-        #burnin-wrapper {
-            transition: transform 1.5s ease-in-out;
-        }
-        /* Custom scrollbar for Spotify tracklist drawer */
-        .custom-scroll::-webkit-scrollbar {
-            width: 4px;
-        }
-        .custom-scroll::-webkit-scrollbar-track {
-            background: rgba(255,255,255,0.05);
-        }
-        .custom-scroll::-webkit-scrollbar-thumb {
-            background: rgba(255,255,255,0.2);
-            border-radius: 2px;
-        }
-    </style>
-</head>
-<body class="h-full w-full bg-amoled flex items-center justify-center p-4 sm:p-8 select-none">
-
-    <!-- Top Floating Toolbar -->
-    <header id="floating-toolbar" class="fixed top-3 right-6 flex items-center gap-3 z-30 opacity-0 transition-opacity duration-500 pointer-events-none">
-        <button id="install-pwa-btn" class="hidden text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-full font-bold transition flex items-center gap-1.5 pointer-events-auto">
-            <i class="fa-solid fa-download text-[10px]"></i>
-            <span>Install App</span>
-        </button>
-        <button id="settings-btn" class="p-2 text-zinc-400 hover:text-white transition pointer-events-auto" title="Settings">
-            <i class="fa-solid fa-sliders text-sm"></i>
-        </button>
-    </header>
-
-    <!-- OLED Burn-In Protection Shift Wrapper -->
-    <div id="burnin-wrapper" class="w-full max-w-md flex flex-col items-center justify-center my-auto">
-        
-        <main class="w-full flex flex-col items-center gap-6 text-center">
-
-            <!-- Clock Section -->
-            <section class="flex flex-col items-center">
-                <div class="flex items-baseline justify-center text-white">
-                    <span id="clock-hours" class="clock-num text-6xl sm:text-7xl">12</span>
-                    <span class="clock-num text-5xl sm:text-6xl opacity-30 -mt-1 mx-1.5 font-bold">:</span>
-                    <span id="clock-minutes" class="clock-num text-6xl sm:text-7xl">00</span>
-                    <span id="clock-ampm" class="text-[10px] font-extrabold tracking-widest text-zinc-500 ml-2 uppercase">AM</span>
-                </div>
-                <p id="clock-date" class="text-xs font-extrabold text-zinc-400 tracking-[0.2em] uppercase mt-3">
-                    TUE, OCT 20
-                </p>
-            </section>
-
-            <!-- Spotify Integration Section -->
-            <section class="w-full max-w-sm flex flex-col items-center gap-2 pt-1">
-                <div id="spotify-login-view" class="flex flex-col items-center gap-2">
-                    <button id="connect-spotify-btn" class="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-full text-xs font-bold border border-white/10 transition-all transform active:scale-95">
-                        <i class="fa-brands fa-spotify text-sm text-white"></i>
-                        <span>Connect Spotify Account</span>
-                    </button>
-                    <p class="text-[9px] text-zinc-500 font-medium px-4 text-center">Hardcoded for GitHub Pages</p>
-                </div>
-
-                <div id="spotify-player-view" class="hidden w-full flex flex-col gap-2.5 p-2 rounded-2xl transition-all duration-700 relative overflow-hidden">
-                    <div id="ambient-glow" class="absolute inset-0 opacity-25 blur-xl transition-all duration-1000 -z-10 scale-125"></div>
-
-                    <div class="flex items-center justify-between gap-3 relative z-10">
-                        <!-- Clickable Track Info Banner -->
-                        <div id="spotify-banner" class="flex items-center gap-3 min-w-0 cursor-pointer group hover:opacity-80 transition-opacity">
-                            <img id="album-art" crossorigin="anonymous" src="https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=150&auto=format&fit=crop&q=80" alt="Album Art" class="w-11 h-11 rounded-xl object-cover flex-shrink-0 shadow-xl border border-white/10 transition-transform duration-500 group-hover:scale-105">
-                            <div class="flex flex-col text-left min-w-0">
-                                <h4 id="track-title" class="text-xs font-extrabold text-white truncate leading-tight tracking-wide">Not Playing</h4>
-                                <p id="track-artist" class="text-[11px] font-bold text-zinc-400 truncate mt-0.5">Connect Spotify or select active device</p>
-                            </div>
-                        </div>
-
-                        <div class="flex items-center gap-3 flex-shrink-0">
-                            <button id="prev-btn" class="text-zinc-400 hover:text-white transition text-xs">
-                                <i class="fa-solid fa-backward-step"></i>
-                            </button>
-                            <button id="play-btn" class="w-8 h-8 rounded-full bg-white text-black flex items-center justify-center text-xs font-bold transition transform active:scale-90 shadow-md">
-                                <i id="play-icon" class="fa-solid fa-play ml-0.5"></i>
-                            </button>
-                            <button id="next-btn" class="text-zinc-400 hover:text-white transition text-xs">
-                                <i class="fa-solid fa-forward-step"></i>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="flex items-center gap-2 w-full relative z-10 px-0.5">
-                        <span id="time-current" class="text-[9px] font-bold text-zinc-500 w-6 text-right">0:00</span>
-                        <input id="track-scrubber" type="range" min="0" max="100" value="0" class="w-full">
-                        <span id="time-total" class="text-[9px] font-bold text-zinc-500 w-6 text-left">0:00</span>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Status Row -->
-            <section class="flex items-center justify-center gap-5 text-zinc-400 text-xs font-extrabold tracking-wide">
-                <div class="flex items-center gap-1.5">
-                    <i id="weather-icon" class="fa-solid fa-sun text-zinc-400 text-xs"></i>
-                    <span id="weather-temp" class="text-zinc-200">22°C</span>
-                    <span id="weather-city" class="text-[10px] text-zinc-600 uppercase hidden sm:inline">Lakeshore</span>
-                </div>
-                <span class="text-zinc-800">•</span>
-                <div class="flex items-center gap-1.5">
-                    <i id="battery-icon" class="fa-solid fa-battery-three-quarters text-zinc-400 text-xs"></i>
-                    <span id="battery-level" class="text-zinc-200">85%</span>
-                </div>
-            </section>
-
-        </main>
-    </div>
-
-    <!-- SPOTIFY TRACK SELECTOR OVERLAY -->
-    <div id="spotify-drawer" class="fixed inset-0 bg-black/90 backdrop-blur-lg z-50 hidden flex items-center justify-center p-4">
-        <div class="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl p-5 flex flex-col gap-4 max-h-[85vh]">
-            <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
-                <div class="flex items-center gap-2">
-                    <i class="fa-brands fa-spotify text-zinc-200 text-base"></i>
-                    <h3 id="drawer-header-title" class="font-extrabold text-white text-sm">Current Album</h3>
-                </div>
-                <button id="close-drawer-btn" class="text-zinc-400 hover:text-white text-base">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>
-
-            <!-- Menu Tabs -->
-            <div class="flex gap-2 border-b border-zinc-800/80 pb-3 text-xs font-bold">
-                <button id="tab-album" class="px-3 py-1.5 rounded-full bg-white text-black transition">Album</button>
-                <button id="tab-recent" class="px-3 py-1.5 rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition">Recent</button>
-                <button id="tab-saved" class="px-3 py-1.5 rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition">Liked Songs</button>
-            </div>
-
-            <!-- Song List Container -->
-            <div id="drawer-track-list" class="flex flex-col gap-1 overflow-y-auto custom-scroll pr-1 max-h-[50vh]">
-                <p class="text-xs text-zinc-500 text-center py-6">Loading tracks...</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- SETTINGS DRAWER -->
-    <div id="settings-modal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
-        <div class="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-3xl p-6 flex flex-col gap-4 text-xs font-semibold">
-            <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
-                <h3 class="font-extrabold text-white text-sm">StandBy Preferences</h3>
-                <button id="close-settings-btn" class="text-zinc-400 hover:text-white text-base">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>
-
-            <div class="flex flex-col gap-3.5">
-                <div class="flex items-center justify-between">
-                    <span class="text-zinc-300">12-Hour Time Format</span>
-                    <input type="checkbox" id="cfg-12h" class="accent-white w-4 h-4 cursor-pointer" checked>
-                </div>
-
-                <div class="flex items-center justify-between">
-                    <span class="text-zinc-300">OLED Burn-In Protection</span>
-                    <input type="checkbox" id="cfg-burnin" class="accent-white w-4 h-4 cursor-pointer" checked>
-                </div>
-
-                <div class="flex items-center justify-between">
-                    <span class="text-zinc-300">Temperature Unit</span>
-                    <div class="flex gap-1 bg-zinc-900 p-1 rounded-lg border border-zinc-800">
-                        <button id="unit-c" class="px-2.5 py-0.5 rounded-md bg-zinc-700 text-white font-extrabold">°C</button>
-                        <button id="unit-f" class="px-2.5 py-0.5 rounded-md text-zinc-400 font-extrabold">°F</button>
-                    </div>
-                </div>
-
-                <div class="pt-3 border-t border-zinc-800 flex justify-between items-center">
-                    <span id="spotify-account-status" class="text-[10px] text-zinc-500 font-bold">Spotify: Not Connected</span>
-                    <button id="logout-spotify-btn" class="hidden text-[10px] text-zinc-400 hover:underline font-bold">Disconnect</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- MAIN APP SCRIPT -->
+<!-- MAIN APP SCRIPT -->
     <script>
         const state = {
             is12h: true,
@@ -345,7 +65,8 @@
         const spotifyAccountStatus = document.getElementById('spotify-account-status');
         const logoutSpotifyBtn = document.getElementById('logout-spotify-btn');
 
-        const REDIRECT_URI = 'https://grazianodesign18.github.io/';
+        // Clean base redirect URI matching your GitHub Pages root
+        const REDIRECT_URI = window.location.origin + window.location.pathname.split('?')[0].split('#')[0];
 
         async function requestWakeLock() {
             if ('wakeLock' in navigator) {
@@ -541,7 +262,8 @@
                     initSpotifyPlayer();
                 } else {
                     console.error("Token Exchange Failed:", data);
-                    alert("Spotify authorization failed. Check your Client ID and Redirect URI settings.");
+                    alert("Spotify authorization failed. Re-connecting account...");
+                    localStorage.removeItem('spotify_access_token');
                 }
             } catch (e) {
                 console.error("Spotify Auth Error:", e);
@@ -554,6 +276,14 @@
                 const res = await fetch('https://api.spotify.com/v1/me/player', {
                     headers: { 'Authorization': `Bearer ${state.accessToken}` }
                 });
+                if (res.status === 401) {
+                    // Token expired/invalid scope -> clear and prompt reconnect
+                    localStorage.removeItem('spotify_access_token');
+                    state.accessToken = null;
+                    spotifyLoginView.classList.remove('hidden');
+                    spotifyPlayerView.classList.add('hidden');
+                    return;
+                }
                 if (res.status === 204 || res.status > 400) return;
                 const data = await res.json();
                 if (data && data.item) {
@@ -624,7 +354,6 @@
             state.activeTab = tab;
             drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">Loading tracks...</p>';
             
-            // Highlight Tab Buttons
             [tabAlbum, tabRecent, tabSaved].forEach(btn => {
                 btn.className = "px-3 py-1.5 rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition";
             });
@@ -745,7 +474,6 @@
             }
         }
 
-        // Open Spotify Drawer on Banner Click
         spotifyBanner.addEventListener('click', () => {
             spotifyDrawer.classList.remove('hidden');
             loadDrawerTabContent('album');
@@ -845,5 +573,3 @@
         handleSpotifyCallback();
         initSpotifyPlayer();
     </script>
-</body>
-</html>
