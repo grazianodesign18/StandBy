@@ -109,6 +109,17 @@
         #burnin-wrapper {
             transition: transform 1.5s ease-in-out;
         }
+        /* Custom scrollbar for Spotify tracklist drawer */
+        .custom-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scroll::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05);
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 2px;
+        }
     </style>
 </head>
 <body class="h-full w-full bg-amoled flex items-center justify-center p-4 sm:p-8 select-none">
@@ -118,9 +129,6 @@
         <button id="install-pwa-btn" class="hidden text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-full font-bold transition flex items-center gap-1.5 pointer-events-auto">
             <i class="fa-solid fa-download text-[10px]"></i>
             <span>Install App</span>
-        </button>
-        <button id="fullscreen-btn" class="p-2 text-zinc-400 hover:text-white transition pointer-events-auto" title="Toggle Fullscreen">
-            <i class="fa-solid fa-expand text-sm"></i>
         </button>
         <button id="settings-btn" class="p-2 text-zinc-400 hover:text-white transition pointer-events-auto" title="Settings">
             <i class="fa-solid fa-sliders text-sm"></i>
@@ -159,8 +167,9 @@
                     <div id="ambient-glow" class="absolute inset-0 opacity-25 blur-xl transition-all duration-1000 -z-10 scale-125"></div>
 
                     <div class="flex items-center justify-between gap-3 relative z-10">
-                        <div class="flex items-center gap-3 min-w-0">
-                            <img id="album-art" crossorigin="anonymous" src="https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=150&auto=format&fit=crop&q=80" alt="Album Art" class="w-11 h-11 rounded-xl object-cover flex-shrink-0 shadow-xl border border-white/10 transition-transform duration-500">
+                        <!-- Clickable Track Info Banner -->
+                        <div id="spotify-banner" class="flex items-center gap-3 min-w-0 cursor-pointer group hover:opacity-80 transition-opacity">
+                            <img id="album-art" crossorigin="anonymous" src="https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=150&auto=format&fit=crop&q=80" alt="Album Art" class="w-11 h-11 rounded-xl object-cover flex-shrink-0 shadow-xl border border-white/10 transition-transform duration-500 group-hover:scale-105">
                             <div class="flex flex-col text-left min-w-0">
                                 <h4 id="track-title" class="text-xs font-extrabold text-white truncate leading-tight tracking-wide">Not Playing</h4>
                                 <p id="track-artist" class="text-[11px] font-bold text-zinc-400 truncate mt-0.5">Connect Spotify or select active device</p>
@@ -188,7 +197,7 @@
                 </div>
             </section>
 
-            <!-- Status Row (Alarms removed) -->
+            <!-- Status Row -->
             <section class="flex items-center justify-center gap-5 text-zinc-400 text-xs font-extrabold tracking-wide">
                 <div class="flex items-center gap-1.5">
                     <i id="weather-icon" class="fa-solid fa-sun text-zinc-400 text-xs"></i>
@@ -203,6 +212,33 @@
             </section>
 
         </main>
+    </div>
+
+    <!-- SPOTIFY TRACK SELECTOR OVERLAY -->
+    <div id="spotify-drawer" class="fixed inset-0 bg-black/90 backdrop-blur-lg z-50 hidden flex items-center justify-center p-4">
+        <div class="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl p-5 flex flex-col gap-4 max-h-[85vh]">
+            <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <div class="flex items-center gap-2">
+                    <i class="fa-brands fa-spotify text-zinc-200 text-base"></i>
+                    <h3 id="drawer-header-title" class="font-extrabold text-white text-sm">Current Album</h3>
+                </div>
+                <button id="close-drawer-btn" class="text-zinc-400 hover:text-white text-base">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Menu Tabs -->
+            <div class="flex gap-2 border-b border-zinc-800/80 pb-3 text-xs font-bold">
+                <button id="tab-album" class="px-3 py-1.5 rounded-full bg-white text-black transition">Album</button>
+                <button id="tab-recent" class="px-3 py-1.5 rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition">Recent</button>
+                <button id="tab-saved" class="px-3 py-1.5 rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition">Liked Songs</button>
+            </div>
+
+            <!-- Song List Container -->
+            <div id="drawer-track-list" class="flex flex-col gap-1 overflow-y-auto custom-scroll pr-1 max-h-[50vh]">
+                <p class="text-xs text-zinc-500 text-center py-6">Loading tracks...</p>
+            </div>
+        </div>
     </div>
 
     <!-- SETTINGS DRAWER -->
@@ -249,7 +285,7 @@
             tempUnit: 'C',
             tempC: 22,
             burnIn: true,
-            spotifyClientId: 'dac8f42143164aa28813f12d9a23e2f7', // Updated Client ID
+            spotifyClientId: 'dac8f42143164aa28813f12d9a23e2f7',
             accessToken: null,
             isPlaying: false,
             trackDuration: 0,
@@ -260,11 +296,25 @@
             localTickInterval: null,
             hideToolbarTimeout: null,
             currentImageSrc: '',
-            deferredPrompt: null
+            deferredPrompt: null,
+            wakeLock: null,
+            currentAlbumId: null,
+            activeTab: 'album',
+            currentTrackUri: null
         };
 
         const floatingToolbar = document.getElementById('floating-toolbar');
         const settingsModal = document.getElementById('settings-modal');
+        const spotifyDrawer = document.getElementById('spotify-drawer');
+        const closeDrawerBtn = document.getElementById('close-drawer-btn');
+        const spotifyBanner = document.getElementById('spotify-banner');
+        const drawerTrackList = document.getElementById('drawer-track-list');
+        const drawerHeaderTitle = document.getElementById('drawer-header-title');
+
+        const tabAlbum = document.getElementById('tab-album');
+        const tabRecent = document.getElementById('tab-recent');
+        const tabSaved = document.getElementById('tab-saved');
+
         const ambientGlow = document.getElementById('ambient-glow');
         const albumArt = document.getElementById('album-art');
         const clockHours = document.getElementById('clock-hours');
@@ -295,8 +345,37 @@
         const spotifyAccountStatus = document.getElementById('spotify-account-status');
         const logoutSpotifyBtn = document.getElementById('logout-spotify-btn');
 
-        // Hardcoded Redirect URI for GitHub Pages
         const REDIRECT_URI = 'https://grazianodesign18.github.io/';
+
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    state.wakeLock = await navigator.wakeLock.request('screen');
+                    state.wakeLock.addEventListener('release', () => {
+                        state.wakeLock = null;
+                    });
+                } catch (err) {}
+            }
+        }
+
+        async function triggerFullscreenAndWakeLock() {
+            if (!document.fullscreenElement) {
+                try {
+                    await document.documentElement.requestFullscreen();
+                } catch (e) {}
+            }
+            await requestWakeLock();
+        }
+
+        window.addEventListener('load', () => {
+            triggerFullscreenAndWakeLock();
+        });
+
+        document.addEventListener('visibilitychange', async () => {
+            if (document.visibilityState === 'visible') {
+                await requestWakeLock();
+            }
+        });
 
         function updateClock() {
             const now = new Date();
@@ -332,12 +411,13 @@
         setInterval(applyBurnInShift, 60000);
 
         function showToolbar() {
+            triggerFullscreenAndWakeLock();
             floatingToolbar.classList.remove('opacity-0', 'pointer-events-none');
             floatingToolbar.classList.add('opacity-100', 'pointer-events-auto');
 
             clearTimeout(state.hideToolbarTimeout);
             state.hideToolbarTimeout = setTimeout(() => {
-                if (settingsModal.classList.contains('hidden')) {
+                if (settingsModal.classList.contains('hidden') && spotifyDrawer.classList.contains('hidden')) {
                     floatingToolbar.classList.remove('opacity-100', 'pointer-events-auto');
                     floatingToolbar.classList.add('opacity-0', 'pointer-events-none');
                 }
@@ -388,7 +468,7 @@
         }
         initBattery();
 
-        const SCOPES = 'user-read-playback-state user-modify-playback-state user-read-currently-playing streaming user-read-email user-read-private';
+        const SCOPES = 'user-read-playback-state user-modify-playback-state user-read-currently-playing streaming user-read-email user-read-private user-library-read user-read-recently-played';
 
         function generateRandomString(length) {
             let text = '';
@@ -484,6 +564,8 @@
                     updateAmbientColor(newArt);
 
                     state.isPlaying = data.is_playing;
+                    state.currentAlbumId = data.item.album.id;
+                    state.currentTrackUri = data.item.uri;
                     playIcon.className = state.isPlaying ? 'fa-solid fa-pause' : 'fa-solid fa-play ml-0.5';
                     state.trackDuration = Math.floor(data.item.duration_ms / 1000);
                     
@@ -517,6 +599,109 @@
             const m = Math.floor(secs / 60);
             const s = Math.floor(secs % 60);
             return `${m}:${s < 10 ? '0' : ''}${s}`;
+        }
+
+        async function playTrackByUri(uri, contextUri = null) {
+            if (!state.accessToken) return;
+            try {
+                const body = contextUri ? { context_uri: contextUri, offset: { uri: uri } } : { uris: [uri] };
+                await fetch('https://api.spotify.com/v1/me/player/play', {
+                    method: 'PUT',
+                    headers: { 
+                        'Authorization': `Bearer ${state.accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(body)
+                });
+                spotifyDrawer.classList.add('hidden');
+                setTimeout(fetchCurrentPlayback, 400);
+            } catch (e) {
+                console.error("Play Track Error:", e);
+            }
+        }
+
+        async function loadDrawerTabContent(tab) {
+            state.activeTab = tab;
+            drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">Loading tracks...</p>';
+            
+            // Highlight Tab Buttons
+            [tabAlbum, tabRecent, tabSaved].forEach(btn => {
+                btn.className = "px-3 py-1.5 rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition";
+            });
+
+            if (tab === 'album') {
+                tabAlbum.className = "px-3 py-1.5 rounded-full bg-white text-black transition font-bold";
+                drawerHeaderTitle.textContent = "Current Album";
+                if (!state.currentAlbumId) {
+                    drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">No album playing</p>';
+                    return;
+                }
+                try {
+                    const res = await fetch(`https://api.spotify.com/v1/albums/${state.currentAlbumId}`, {
+                        headers: { 'Authorization': `Bearer ${state.accessToken}` }
+                    });
+                    const albumData = await res.json();
+                    renderTrackList(albumData.tracks.items, albumData.uri);
+                } catch(e) {
+                    drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">Failed to load album tracks</p>';
+                }
+            } else if (tab === 'recent') {
+                tabRecent.className = "px-3 py-1.5 rounded-full bg-white text-black transition font-bold";
+                drawerHeaderTitle.textContent = "Recently Played";
+                try {
+                    const res = await fetch('https://api.spotify.com/v1/me/player/recently-played?limit=20', {
+                        headers: { 'Authorization': `Bearer ${state.accessToken}` }
+                    });
+                    const data = await res.json();
+                    const tracks = data.items.map(item => item.track);
+                    renderTrackList(tracks);
+                } catch(e) {
+                    drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">Failed to load recent tracks</p>';
+                }
+            } else if (tab === 'saved') {
+                tabSaved.className = "px-3 py-1.5 rounded-full bg-white text-black transition font-bold";
+                drawerHeaderTitle.textContent = "Liked Songs";
+                try {
+                    const res = await fetch('https://api.spotify.com/v1/me/tracks?limit=30', {
+                        headers: { 'Authorization': `Bearer ${state.accessToken}` }
+                    });
+                    const data = await res.json();
+                    const tracks = data.items.map(item => item.track);
+                    renderTrackList(tracks);
+                } catch(e) {
+                    drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">Failed to load liked songs</p>';
+                }
+            }
+        }
+
+        function renderTrackList(tracks, contextUri = null) {
+            if (!tracks || tracks.length === 0) {
+                drawerTrackList.innerHTML = '<p class="text-xs text-zinc-500 text-center py-6">No tracks found</p>';
+                return;
+            }
+
+            drawerTrackList.innerHTML = '';
+            tracks.forEach((track, index) => {
+                const isPlayingThis = state.currentTrackUri === track.uri;
+                const row = document.createElement('div');
+                row.className = `flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition ${isPlayingThis ? 'bg-white/10 text-white font-bold' : 'hover:bg-zinc-900 text-zinc-300'}`;
+                
+                const artistName = track.artists ? track.artists.map(a => a.name).join(', ') : 'Unknown Artist';
+                
+                row.innerHTML = `
+                    <div class="flex items-center gap-3 min-w-0 pr-2">
+                        <span class="text-[10px] text-zinc-500 w-4 text-center flex-shrink-0 font-bold">${index + 1}</span>
+                        <div class="flex flex-col min-w-0">
+                            <span class="text-xs truncate ${isPlayingThis ? 'text-green-400 font-extrabold' : 'text-white'}">${track.name}</span>
+                            <span class="text-[10px] text-zinc-500 truncate">${artistName}</span>
+                        </div>
+                    </div>
+                    <i class="fa-solid ${isPlayingThis ? 'fa-volume-high text-green-400' : 'fa-play text-zinc-600 group-hover:text-white'} text-xs flex-shrink-0"></i>
+                `;
+
+                row.addEventListener('click', () => playTrackByUri(track.uri, contextUri));
+                drawerTrackList.appendChild(row);
+            });
         }
 
         async function seekSpotifyPlayback(positionMs) {
@@ -560,7 +745,18 @@
             }
         }
 
-        // Scrubber / Seek Event Handlers
+        // Open Spotify Drawer on Banner Click
+        spotifyBanner.addEventListener('click', () => {
+            spotifyDrawer.classList.remove('hidden');
+            loadDrawerTabContent('album');
+        });
+
+        closeDrawerBtn.addEventListener('click', () => spotifyDrawer.classList.add('hidden'));
+
+        tabAlbum.addEventListener('click', () => loadDrawerTabContent('album'));
+        tabRecent.addEventListener('click', () => loadDrawerTabContent('recent'));
+        tabSaved.addEventListener('click', () => loadDrawerTabContent('saved'));
+
         trackScrubber.addEventListener('input', (e) => {
             state.isScrubbing = true;
             if (state.trackDuration > 0) {
@@ -644,14 +840,6 @@
             unitC.className = 'px-2.5 py-0.5 rounded-md text-zinc-400 font-extrabold';
             const tempF = Math.round((state.tempC * 9/5) + 32);
             document.getElementById('weather-temp').textContent = `${tempF}°F`;
-        });
-
-        document.getElementById('fullscreen-btn').addEventListener('click', () => {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(() => {});
-            } else {
-                document.exitFullscreen().catch(() => {});
-            }
         });
 
         handleSpotifyCallback();
