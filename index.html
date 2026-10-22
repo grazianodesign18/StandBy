@@ -2,7 +2,7 @@
 <html lang="en" class="h-full">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>StandBy AMOLED Clock</title>
     
     <!-- Prevent Mobile Browser Caching -->
@@ -79,12 +79,15 @@
             -webkit-user-select: none;
             -webkit-touch-callout: none;
         }
-        body {
+        html, body {
             background-color: #000000;
             color: #ffffff;
             font-family: 'Plus Jakarta Sans', sans-serif;
             overflow: hidden;
             touch-action: manipulation;
+            width: 100vw;
+            height: 100vh;
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         }
         .clock-num {
             font-family: 'Unbounded', sans-serif;
@@ -124,12 +127,19 @@
             background: rgba(255,255,255,0.2);
             border-radius: 2px;
         }
+        @keyframes slideUp {
+            from { transform: translateY(16px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .animate-slide-up {
+            animation: slideUp 0.4s ease-out forwards;
+        }
     </style>
 </head>
 <body class="h-full w-full bg-amoled flex items-center justify-center p-4 sm:p-8 select-none relative">
 
-    <!-- FLOATING BACKGROUND GLOW LAYER -->
-    <div id="ambient-glow" class="fixed inset-0 pointer-events-none transition-all duration-1000 ease-out z-0 opacity-40"></div>
+    <!-- FULLSCREEN GRADIENT BACKGROUND LAYER -->
+    <div id="ambient-glow" class="fixed -inset-10 pointer-events-none transition-all duration-1000 ease-out z-0 opacity-40"></div>
 
     <!-- Top Floating Toolbar -->
     <header id="floating-toolbar" class="fixed top-3 right-6 flex items-center gap-3 z-30 opacity-0 transition-opacity duration-500 pointer-events-none">
@@ -141,6 +151,17 @@
             <i class="fa-solid fa-sliders text-sm"></i>
         </button>
     </header>
+
+    <!-- TYPE 1 FULLSCREEN LYRICS OVERLAY -->
+    <div id="lyrics-fullscreen-view" class="fixed inset-0 bg-black/95 backdrop-blur-xl z-40 hidden flex flex-col items-center justify-center p-8 text-center">
+        <button id="close-fullscreen-lyrics" class="absolute top-6 right-8 text-zinc-400 hover:text-white text-lg">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+        <div id="fullscreen-lyrics-container" class="max-w-xl flex flex-col gap-6">
+            <p class="text-2xl sm:text-3xl font-extrabold text-white animate-slide-up" id="fs-current-lyric">Loading lyrics...</p>
+            <p class="text-lg sm:text-xl font-bold text-zinc-600" id="fs-next-lyric"></p>
+        </div>
+    </div>
 
     <!-- OLED Burn-In Protection Shift Wrapper -->
     <div id="burnin-wrapper" class="w-full max-w-md flex flex-col items-center justify-center my-auto z-10 relative">
@@ -170,11 +191,10 @@
                     <p class="text-[9px] text-zinc-500 font-medium px-4 text-center">Hardcoded for GitHub Pages</p>
                 </div>
 
-                <!-- Floating Spotify Player Component -->
+                <!-- Floating Player Component -->
                 <div id="spotify-player-view" class="hidden w-full flex flex-col gap-3 py-1 px-1 transition-all duration-700 relative">
 
                     <div class="flex items-center justify-between gap-3 relative z-10">
-                        <!-- Clickable Track Info Banner -->
                         <div id="spotify-banner" class="flex items-center gap-3 min-w-0 cursor-pointer group hover:opacity-80 transition-opacity">
                             <img id="album-art" crossorigin="anonymous" src="https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=150&auto=format&fit=crop&q=80" alt="Album Art" class="w-11 h-11 rounded-xl object-cover flex-shrink-0 shadow-lg shadow-black/50 transition-transform duration-500 group-hover:scale-105">
                             <div class="flex flex-col text-left min-w-0">
@@ -183,7 +203,10 @@
                             </div>
                         </div>
 
-                        <div class="flex items-center gap-3 flex-shrink-0">
+                        <div class="flex items-center gap-2.5 flex-shrink-0">
+                            <button id="shuffle-btn" class="text-zinc-600 hover:text-white transition text-xs" title="Shuffle">
+                                <i class="fa-solid fa-shuffle"></i>
+                            </button>
                             <button id="prev-btn" class="text-zinc-400 hover:text-white transition text-xs">
                                 <i class="fa-solid fa-backward-step"></i>
                             </button>
@@ -192,6 +215,12 @@
                             </button>
                             <button id="next-btn" class="text-zinc-400 hover:text-white transition text-xs">
                                 <i class="fa-solid fa-forward-step"></i>
+                            </button>
+                            <button id="repeat-btn" class="text-zinc-600 hover:text-white transition text-xs" title="Repeat">
+                                <i class="fa-solid fa-repeat"></i>
+                            </button>
+                            <button id="lyrics-toggle-btn" class="text-zinc-500 hover:text-white transition text-xs ml-1" title="Toggle Lyrics">
+                                <i class="fa-solid fa-microphone-lines"></i>
                             </button>
                         </div>
                     </div>
@@ -217,6 +246,12 @@
                     <span id="battery-level" class="text-zinc-200">85%</span>
                 </div>
             </section>
+
+            <!-- TYPE 2 INLINE LYRICS CONTAINER (Borderless, just below battery/weather) -->
+            <div id="type2-lyrics-container" class="w-full max-w-sm flex flex-col items-center text-center h-12 justify-center overflow-hidden hidden">
+                <p id="t2-current" class="text-xs font-bold text-white transition-all duration-300 animate-slide-up truncate px-2"></p>
+                <p id="t2-next" class="text-[10px] font-medium text-zinc-600 transition-all duration-300 truncate px-2 mt-0.5"></p>
+            </div>
 
         </main>
     </div>
@@ -271,6 +306,19 @@
                 </div>
 
                 <div class="flex items-center justify-between">
+                    <span class="text-zinc-300">Ambient Background Glow</span>
+                    <input type="checkbox" id="cfg-glow" class="accent-white w-4 h-4 cursor-pointer" checked>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <span class="text-zinc-300">Lyrics Display Style</span>
+                    <div class="flex gap-1 bg-zinc-900 p-1 rounded-lg border border-zinc-800">
+                        <button id="lyrics-type-1" class="px-2.5 py-0.5 rounded-md text-zinc-400 font-extrabold">Type 1</button>
+                        <button id="lyrics-type-2" class="px-2.5 py-0.5 rounded-md bg-zinc-700 text-white font-extrabold">Type 2</button>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between">
                     <span class="text-zinc-300">Temperature Unit</span>
                     <div class="flex gap-1 bg-zinc-900 p-1 rounded-lg border border-zinc-800">
                         <button id="unit-c" class="px-2.5 py-0.5 rounded-md text-zinc-400 font-extrabold">°C</button>
@@ -293,9 +341,14 @@
             tempUnit: localStorage.getItem('standby_temp_unit') || 'F',
             tempC: 22,
             burnIn: true,
+            glowEnabled: localStorage.getItem('standby_glow_enabled') !== 'false',
+            lyricsType: localStorage.getItem('standby_lyrics_type') || '2',
+            lyricsActive: false,
             spotifyClientId: 'dac8f42143164aa28813f12d9a23e2f7',
             accessToken: null,
             isPlaying: false,
+            isShuffle: false,
+            repeatState: 'off', // 'off', 'context', 'track'
             trackDuration: 0,
             trackProgress: 0,
             lastFetchTime: 0,
@@ -309,7 +362,12 @@
             currentAlbumId: null,
             activeTab: 'album',
             currentTrackUri: null,
-            viewingAlbumId: null
+            mockLyrics: [
+                { time: 0, text: "♪ Instrumental Intro ♪", next: "Here we go again" },
+                { time: 10, text: "Here we go again", next: "Feeling like a champion" },
+                { time: 20, text: "Feeling like a champion", next: "Nothing can stop us now" },
+                { time: 35, text: "Nothing can stop us now", next: "♪ Instrumental ♪" }
+            ]
         };
 
         const floatingToolbar = document.getElementById('floating-toolbar');
@@ -342,14 +400,29 @@
         const playIcon = document.getElementById('play-icon');
         const prevBtn = document.getElementById('prev-btn');
         const nextBtn = document.getElementById('next-btn');
+        const shuffleBtn = document.getElementById('shuffle-btn');
+        const repeatBtn = document.getElementById('repeat-btn');
+        const lyricsToggleBtn = document.getElementById('lyrics-toggle-btn');
         const trackScrubber = document.getElementById('track-scrubber');
         const timeCurrent = document.getElementById('time-current');
         const timeTotal = document.getElementById('time-total');
+        
+        const lyricsFullscreenView = document.getElementById('lyrics-fullscreen-view');
+        const closeFullscreenLyrics = document.getElementById('close-fullscreen-lyrics');
+        const fsCurrentLyric = document.getElementById('fs-current-lyric');
+        const fsNextLyric = document.getElementById('fs-next-lyric');
+        const type2Container = document.getElementById('type2-lyrics-container');
+        const t2Current = document.getElementById('t2-current');
+        const t2Next = document.getElementById('t2-next');
+
         const installPwaBtn = document.getElementById('install-pwa-btn');
         const settingsBtn = document.getElementById('settings-btn');
         const closeSettingsBtn = document.getElementById('close-settings-btn');
         const cfg12h = document.getElementById('cfg-12h');
         const cfgBurnin = document.getElementById('cfg-burnin');
+        const cfgGlow = document.getElementById('cfg-glow');
+        const lyricsType1Btn = document.getElementById('lyrics-type-1');
+        const lyricsType2Btn = document.getElementById('lyrics-type-2');
         const unitC = document.getElementById('unit-c');
         const unitF = document.getElementById('unit-f');
         const spotifyAccountStatus = document.getElementById('spotify-account-status');
@@ -357,6 +430,19 @@
         const weatherTemp = document.getElementById('weather-temp');
 
         const REDIRECT_URI = window.location.origin + window.location.pathname.split('?')[0].split('#')[0];
+
+        cfgGlow.checked = state.glowEnabled;
+
+        function applyLyricsStyleUI() {
+            if (state.lyricsType === '1') {
+                lyricsType1Btn.className = 'px-2.5 py-0.5 rounded-md bg-zinc-700 text-white font-extrabold';
+                lyricsType2Btn.className = 'px-2.5 py-0.5 rounded-md text-zinc-400 font-extrabold';
+            } else {
+                lyricsType2Btn.className = 'px-2.5 py-0.5 rounded-md bg-zinc-700 text-white font-extrabold';
+                lyricsType1Btn.className = 'px-2.5 py-0.5 rounded-md text-zinc-400 font-extrabold';
+            }
+        }
+        applyLyricsStyleUI();
 
         function applyTempUnitUI() {
             if (state.tempUnit === 'F') {
@@ -384,11 +470,6 @@
         }
 
         async function triggerFullscreenAndWakeLock() {
-            if (!document.fullscreenElement) {
-                try {
-                    await document.documentElement.requestFullscreen();
-                } catch (e) {}
-            }
             await requestWakeLock();
         }
 
@@ -453,8 +534,11 @@
         window.addEventListener('mousemove', showToolbar, { passive: true });
         window.addEventListener('click', showToolbar, { passive: true });
 
-        // VIBRANT COLOR EXTRACTION ALGORITHM (LYRICS-STYLE COLOR EXTRACTION)
         function updateAmbientColor(imgSrc) {
+            if (!state.glowEnabled) {
+                ambientGlow.style.background = 'transparent';
+                return;
+            }
             if (state.currentImageSrc === imgSrc) return;
             state.currentImageSrc = imgSrc;
 
@@ -482,7 +566,6 @@
                     const chroma = max - min;
                     const brightness = (r * 299 + g * 587 + b * 114) / 1000;
 
-                    // Filter out dark muted grays, pure whites, and deep blacks
                     if (brightness > 20 && brightness < 220 && chroma > 15) {
                         const score = chroma * 2 + (128 - Math.abs(brightness - 128));
                         if (score > maxScore) {
@@ -494,8 +577,7 @@
                     }
                 }
 
-                // Smoothly fade across screen without boxy edges
-                ambientGlow.style.background = `radial-gradient(ellipse at center, rgba(${bestR},${bestG},${bestB}, 0.75) 0%, rgba(${bestR},${bestG},${bestB}, 0.35) 45%, rgba(0,0,0,0) 80%)`;
+                ambientGlow.style.background = `radial-gradient(circle at 50% 50%, rgba(${bestR},${bestG},${bestB}, 0.55) 0%, rgba(${bestR},${bestG},${bestB}, 0.25) 40%, rgba(0,0,0,0) 70%)`;
             };
         }
 
@@ -601,6 +683,37 @@
             }
         }
 
+        function updateLyricsDisplay() {
+            if (!state.lyricsActive) {
+                lyricsFullscreenView.classList.add('hidden');
+                type2Container.classList.add('hidden');
+                return;
+            }
+
+            // Find current active lyric line based on trackProgress
+            let activeIdx = 0;
+            for (let i = 0; i < state.mockLyrics.length; i++) {
+                if (state.trackProgress >= state.mockLyrics[i].time) {
+                    activeIdx = i;
+                }
+            }
+
+            const currentObj = state.mockLyrics[activeIdx] || state.mockLyrics[0];
+            const nextObj = state.mockLyrics[activeIdx + 1] || { text: "" };
+
+            if (state.lyricsType === '1') {
+                lyricsFullscreenView.classList.remove('hidden');
+                type2Container.classList.add('hidden');
+                fsCurrentLyric.textContent = currentObj.text;
+                fsNextLyric.textContent = nextObj.text;
+            } else {
+                lyricsFullscreenView.classList.add('hidden');
+                type2Container.classList.remove('hidden');
+                t2Current.textContent = currentObj.text;
+                t2Next.textContent = nextObj.text;
+            }
+        }
+
         async function fetchCurrentPlayback() {
             if (!state.accessToken) return;
             try {
@@ -624,15 +737,35 @@
                     updateAmbientColor(newArt);
 
                     state.isPlaying = data.is_playing;
+                    state.isShuffle = data.shuffle_state || false;
+                    state.repeatState = data.repeat_state || 'off';
                     state.currentAlbumId = data.item.album.id;
                     state.currentTrackUri = data.item.uri;
+                    
                     playIcon.className = state.isPlaying ? 'fa-solid fa-pause' : 'fa-solid fa-play ml-0.5';
+                    
+                    // Update Shuffle Button UI
+                    shuffleBtn.className = state.isShuffle ? 'text-green-400 transition text-xs' : 'text-zinc-600 hover:text-white transition text-xs';
+                    
+                    // Update Repeat Button UI
+                    if (state.repeatState === 'off') {
+                        repeatBtn.className = 'text-zinc-600 hover:text-white transition text-xs';
+                        repeatBtn.title = 'Repeat: Off';
+                    } else if (state.repeatState === 'context') {
+                        repeatBtn.className = 'text-green-400 transition text-xs';
+                        repeatBtn.title = 'Repeat: All';
+                    } else {
+                        repeatBtn.className = 'text-green-400 transition text-xs relative after:content-["1"] after:absolute after:-bottom-1 after:-right-1 after:text-[8px] after:font-bold';
+                        repeatBtn.title = 'Repeat: One';
+                    }
+
                     state.trackDuration = Math.floor(data.item.duration_ms / 1000);
                     
                     if (!state.isScrubbing) {
                         state.trackProgress = Math.floor(data.progress_ms / 1000);
                         state.lastFetchTime = Date.now();
                         updateScrubberUI();
+                        updateLyricsDisplay();
                     }
                 }
             } catch (e) {}
@@ -645,6 +778,7 @@
                     state.trackProgress = state.trackDuration;
                 }
                 updateScrubberUI();
+                updateLyricsDisplay();
             }
         }
 
@@ -865,6 +999,34 @@
             } catch (e) {}
         }
 
+        async function toggleShufflePlayback() {
+            if (!state.accessToken) return;
+            const newShuffleState = !state.isShuffle;
+            try {
+                await fetch(`https://api.spotify.com/v1/me/player/shuffle?state=${newShuffleState}`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${state.accessToken}` }
+                });
+                setTimeout(fetchCurrentPlayback, 300);
+            } catch(e) {}
+        }
+
+        async function cycleRepeatMode() {
+            if (!state.accessToken) return;
+            let nextRepeat = 'off';
+            if (state.repeatState === 'off') nextRepeat = 'context';
+            else if (state.repeatState === 'context') nextRepeat = 'track';
+            else nextRepeat = 'off';
+
+            try {
+                await fetch(`https://api.spotify.com/v1/me/player/repeat?state=${nextRepeat}`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${state.accessToken}` }
+                });
+                setTimeout(fetchCurrentPlayback, 300);
+            } catch(e) {}
+        }
+
         function initSpotifyPlayer() {
             const savedToken = localStorage.getItem('spotify_access_token');
             if (savedToken) state.accessToken = savedToken;
@@ -924,6 +1086,24 @@
         });
         nextBtn.addEventListener('click', () => spotifyControl('next'));
         prevBtn.addEventListener('click', () => spotifyControl('previous'));
+        shuffleBtn.addEventListener('click', toggleShufflePlayback);
+        repeatBtn.addEventListener('click', cycleRepeatMode);
+
+        lyricsToggleBtn.addEventListener('click', () => {
+            state.lyricsActive = !state.lyricsActive;
+            if (state.lyricsActive) {
+                lyricsToggleBtn.className = 'text-green-400 transition text-xs ml-1';
+            } else {
+                lyricsToggleBtn.className = 'text-zinc-500 hover:text-white transition text-xs ml-1';
+            }
+            updateLyricsDisplay();
+        });
+
+        closeFullscreenLyrics.addEventListener('click', () => {
+            state.lyricsActive = false;
+            lyricsToggleBtn.className = 'text-zinc-500 hover:text-white transition text-xs ml-1';
+            updateLyricsDisplay();
+        });
 
         logoutSpotifyBtn.addEventListener('click', () => {
             localStorage.removeItem('spotify_access_token');
@@ -964,6 +1144,31 @@
         cfgBurnin.addEventListener('change', (e) => {
             state.burnIn = e.target.checked;
             if (!state.burnIn) burninWrapper.style.transform = 'translate(0px, 0px)';
+        });
+
+        cfgGlow.addEventListener('change', (e) => {
+            state.glowEnabled = e.target.checked;
+            localStorage.setItem('standby_glow_enabled', state.glowEnabled);
+            if (!state.glowEnabled) {
+                ambientGlow.style.background = 'transparent';
+            } else {
+                state.currentImageSrc = '';
+                if (albumArt.src) updateAmbientColor(albumArt.src);
+            }
+        });
+
+        lyricsType1Btn.addEventListener('click', () => {
+            state.lyricsType = '1';
+            localStorage.setItem('standby_lyrics_type', '1');
+            applyLyricsStyleUI();
+            updateLyricsDisplay();
+        });
+
+        lyricsType2Btn.addEventListener('click', () => {
+            state.lyricsType = '2';
+            localStorage.setItem('standby_lyrics_type', '2');
+            applyLyricsStyleUI();
+            updateLyricsDisplay();
         });
 
         unitC.addEventListener('click', () => {
